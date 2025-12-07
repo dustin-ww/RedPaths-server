@@ -28,6 +28,12 @@ type Host struct {
 	WhenCreated            time.Time `json:"whenCreated"`
 	WhenChanged            time.Time `json:"whenChanged"`
 	UserAccountControl     int       `json:"userAccountControl"`
+
+	// History related
+	DiscoveredAt time.Time `json:"discovered_at,omitempty"`
+	DiscoveredBy string    `json:"discovered_by,omitempty"`
+	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
+	LastSeenBy   string    `json:"last_seen_by,omitempty"`
 }
 
 type HostBuilder struct {

@@ -23,10 +23,17 @@ type Domain struct {
 	FSMORoleOwners      []string       `json:"fsmo_role_owners,omitempty"`
 	SecurityPolicies    utils.UIDRef   `json:"security_policies,omitempty"`
 	TrustRelationships  []utils.UIDRef `json:"trust_relationships,omitempty"`
-	Created             time.Time      `json:"created,omitempty"`
-	LastModified        time.Time      `json:"last_modified,omitempty"`
-	LinkedGPOs          []string       `json:"linked_gpos,omitempty"`
-	DefaultContainers   []string       `json:"default_containers,omitempty"`
+	// TODO: REMOVE
+	CreatedAt         time.Time `json:"created_at,omitempty"`
+	LastModified      time.Time `json:"last_modified,omitempty"`
+	LinkedGPOs        []string  `json:"linked_gpos,omitempty"`
+	DefaultContainers []string  `json:"default_containers,omitempty"`
+
+	// History related
+	DiscoveredAt time.Time `json:"discovered_at,omitempty"`
+	DiscoveredBy string    `json:"discovered_by,omitempty"`
+	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
+	LastSeenBy   string    `json:"last_seen_by,omitempty"`
 }
 
 type SecurityPolicy struct {
@@ -51,7 +58,7 @@ func NewDomainBuilder() *DomainBuilder {
 	return &DomainBuilder{
 		domain: Domain{
 			DType:        []string{"Domain"},
-			Created:      time.Now(),
+			CreatedAt:    time.Now(),
 			LastModified: time.Now(),
 		},
 	}
@@ -138,7 +145,7 @@ func (b *DomainBuilder) AddTrustRelationship(trust utils.UIDRef) *DomainBuilder 
 }
 
 func (b *DomainBuilder) WithCreated(created time.Time) *DomainBuilder {
-	b.domain.Created = created
+	b.domain.CreatedAt = created
 	return b
 }
 
