@@ -1,0 +1,61 @@
+# Registered Enumeration Modules
+enumeration:
+    # Network Explorer
+    NetworkExplorer:
+      name: "Network Explorer ng"
+      attack_id: "enum01"
+      version: "0.1"
+      description: "This is a test"
+      author: "dsec"
+      execution_metric: "4h"
+      inherits:
+      loot_path: "/loot/nmap"
+      options:
+        target:
+          type: textInput
+          label: Target Input
+          placeholder: for example 0.0.0.0/24
+        fullscan:
+          key: _
+          label: Should Scan Run as Full Scan?
+          type: checkbox
+          required: true
+        udp:
+          key: _
+          label: Should Scan Run in UDP Mode?
+          type: textInput
+          required: true
+        additional:
+          type: textInput
+          label: Additional Flags for nmap
+          placeholder: for example -sV
+
+    # DNS Explorer
+    DNSExplorer:
+      name: "DNS Explorer ng"
+      attack_id: "enum02"
+      version: "0.1"
+      description: "DNS Cool"
+      author: "dw-sec"
+      execution_metric: "4h"
+      inherits:
+      loot_path: "/loot/dns"
+
+# Registered Attack Simulation Modules
+attack:
+    PrinterNightmare:
+      name: "Printer Nightmare Attack Simulation"
+      attack_id: "attack01"
+      version: "0.1"
+      description: "Very first AD Attack Simulation Module"
+      author: "dsec"
+      inherits:
+        - NetworkExplorer
+        - DNSExplorer
+      loot_path: "/loot/pn"
+      options:
+        fullscan:
+          key: _
+          label: Should Scan Run as Full Scan?
+          type: checkbox
+          required: true

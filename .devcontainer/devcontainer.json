@@ -1,0 +1,19 @@
+{
+  "name": "Go RedPaths Server DevContainer",
+  "dockerComposeFile": "../deployments/docker-compose.yml",
+  "service": "redpaths-server",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "redpaths",
+
+  "forwardPorts": [8081],
+
+  "postCreateCommand": "go mod tidy",
+
+  "customizations": {
+    "jetbrains": {
+      "projector": {
+        "defaultShell": "/bin/bash"
+      }
+    }
+  }
+}

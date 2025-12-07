@@ -1,0 +1,174 @@
+<name>: string @index(exact) .
+<has_target>: [uid] .
+<description>: string .
+<modified_at>: datetime .
+<created_at>: datetime .
+<belongs_to_project>: uid @reverse .
+<has_domain>: [uid] .
+<has_redpaths_modules>: [uid] .
+<has_host>: [uid] .
+<belongs_to_domain>: [uid] @reverse .
+<deployed_on_host>: [uid] @reverse .
+<has_user>: [uid] .
+<has_service>: [uid] .
+<port>: string .
+<is_domain_controller>: bool .
+<ntlm_hash>: string .
+<password>: string .
+<ip>: string @index(exact) .
+<is_admin>: bool .
+<tags>: [string] .
+<attack_id>: string @index(exact) .
+<metric>: string .
+<version>: string .
+<author>: string .
+<last_run>: datetime .
+<has_dependency>: [uid] .
+<is_assumed_by>: [uid] @reverse .
+
+<last_seen_at>: datetime .
+<last_seen_by>: string.
+<is_verified>: bool .
+<is_usable>: bool .
+
+<dns_name>: string @index(exact) .
+<net_bios_name>: string @index(exact) .
+<domain_guid>: string @index(exact) .
+<domain_sid>: string .
+<domain_function_level>: string .
+<forest_function_level>: string .
+<fsmo_role_owners>: [string] .
+<security_policies>: uid .
+<trust_relationships>: [uid] .
+<last_modified>: datetime .
+<linked_gpos>: [string] .
+<default_containers>: [string] .
+<min_pwd_length>: int .
+<pwd_history_length>: int .
+<lockout_threshold>: int .
+<lockout_duration>: int .
+<trusted_domain>: string @index(exact) .
+<direction>: string .
+<trust_type>: string .
+<is_transitive>: bool .
+<note>: string .
+<initialized>: bool .
+<cidr>: int .
+
+
+type Project {
+  name
+  tags
+  description
+  has_target
+  created_at
+  modified_at
+  has_domain
+  has_host
+  has_redpaths_modules
+  dgraph.type
+}
+
+type RedPathsModule {
+  attack_id
+  metric
+  name
+  version
+  author
+  last_run
+  has_dependency
+  is_assumed_by
+  dgraph.type
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+
+}
+
+type Target {
+  ip
+  cidr
+  note
+  dgraph.type
+  is_verified
+  created_at
+}
+
+type Domain {
+  name
+  dns_name
+  net_bios_name
+  domain_guid
+  domain_sid
+  domain_function_level
+  forest_function_level
+  fsmo_role_owners
+  security_policies
+  trust_relationships
+  created_at
+  last_modified
+  linked_gpos
+  default_containers
+  belongs_to_project
+  has_host
+  has_user
+  dgraph.type
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+}
+
+type SecurityPolicy {
+  min_pwd_length
+  pwd_history_length
+  lockout_threshold
+  lockout_duration
+  dgraph.type
+}
+
+type Trust {
+  trusted_domain
+  direction
+  trust_type
+  is_transitive
+  dgraph.type
+}
+
+type Host {
+  ip
+  is_domain_controller
+  belongs_to_domain
+  has_service
+  dgraph.type
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+}
+
+type Service {
+  name
+  port
+  deployed_on_host
+  dgraph.type
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+}
+
+type User {
+  name
+  ntlm_hash
+  password
+  is_admin
+  belongs_to_domain
+  dgraph.type
+  is_usable
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+}
