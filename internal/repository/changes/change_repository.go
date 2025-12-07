@@ -1,7 +1,7 @@
 package changes
 
 import (
-	"RedPaths-server/pkg/model/redpaths/change"
+	"RedPaths-server/pkg/model/redpaths/history"
 	"context"
 
 	"gorm.io/gorm"
@@ -15,9 +15,9 @@ const (
 type RedPathsChangeRepository interface {
 
 	//CRUD
-	GetAllChangeEventsByProject(ctx context.Context, tx *gorm.DB, projectUID string) ([]*change.Event, error)
-	GetAllEventsByTransaction(ctx context.Context, tx *gorm.DB, moduleRunID string) ([]*change.Event, error)
-	CreateChangeEvent(ctx context.Context, tx *gorm.DB, event *change.Event) error
+	GetAllChangeEventsByProject(ctx context.Context, tx *gorm.DB, projectUID string) ([]*history.Event, error)
+	GetAllEventsByTransaction(ctx context.Context, tx *gorm.DB, moduleRunID string) ([]*history.Event, error)
+	CreateChangeEvent(ctx context.Context, tx *gorm.DB, event *history.Event) error
 }
 
 type PostgresRedPathsModuleRepository struct{}

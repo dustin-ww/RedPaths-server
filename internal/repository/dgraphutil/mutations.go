@@ -740,6 +740,74 @@ func ExistsByFieldInProject(ctx context.Context, tx *dgo.Txn, projectID string, 
 	return hasEntitiesInPath(projects[0], entityType), nil
 }
 
+func ExistsByFieldOnParent(
+	ctx context.Context,
+	tx *dgo.Txn,
+	parentUID string,
+	parentType string,
+	childType string,
+	relationName string, // z.B. "has_service"
+	fieldName string,
+	fieldValue interface{},
+) (exists bool, childUID string, err error) {
+	if tx == nil {
+		return false, "", fmt.Errorf("transaction cannot be nil")
+	}
+
+	dgType, dgValue, err := getDgraphTypeAndValue(fieldValue)
+	if err != nil {
+		return false, "", fmt.Errorf("type handling error: %w", err)
+	}
+
+	query := fmt.Sprintf(`
+        query CheckChildOnParent($parentUID: string, $fieldValue: %s) {
+            parent(func: uid($parentUID)) @filter(type(%s)) {
+                %s @filter(type(%s) AND eq(%s, $fieldValue)) {
+                    uid
+                }
+            }
+        }
+    `, dgType, parentType, relationName, childType, fieldName)
+
+	vars := map[string]string{
+		"$parentUID":  parentUID,
+		"$fieldValue": dgValue,
+	}
+
+	res, err := tx.QueryWithVars(ctx, query, vars)
+	if err != nil {
+		return false, "", fmt.Errorf("query error: %w", err)
+	}
+
+	var result map[string][]interface{}
+	if err := json.Unmarshal(res.Json, &result); err != nil {
+		return false, "", fmt.Errorf("unmarshal error: %w", err)
+	}
+
+	parents, ok := result["parent"]
+	if !ok || len(parents) == 0 {
+		return false, "", nil
+	}
+
+	parentMap, ok := parents[0].(map[string]interface{})
+	if !ok {
+		return false, "", nil
+	}
+
+	children, ok := parentMap[relationName].([]interface{})
+	if !ok || len(children) == 0 {
+		return false, "", nil
+	}
+
+	if childMap, ok := children[0].(map[string]interface{}); ok {
+		if uid, ok := childMap["uid"].(string); ok {
+			return true, uid, nil
+		}
+	}
+
+	return false, "", nil
+}
+
 func hasEntitiesInPath(data interface{}, entityType string) bool {
 	obj, ok := data.(map[string]interface{})
 	if !ok {

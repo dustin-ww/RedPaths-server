@@ -3,6 +3,7 @@ package active_directory
 import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
+	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model"
 	"context"
 	"fmt"
@@ -37,23 +38,40 @@ func NewHostService(dgraphCon *dgo.Dgraph) (*HostService, error) {
 func (s *HostService) AddService(ctx context.Context, hostUID string, service model.Service) (string, error) {
 	var serviceUID string
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		var err error
-		serviceUID, err = s.serviceRepo.CreateWithObject(ctx, tx, service)
+		exists, existingUID, err := dgraphutil.ExistsByFieldOnParent(
+			ctx,
+			tx,
+			hostUID,
+			"Host",
+			"Service",
+			"has_service",
+			"port",
+			service.Port,
+		)
 		if err != nil {
-			return fmt.Errorf("failed to create service: %w", err)
+			return fmt.Errorf("failed to check service existence: %w", err)
 		}
 
-		if err := s.hostRepo.AddService(ctx, tx, hostUID, serviceUID); err != nil {
-			return fmt.Errorf("failed to link service to host: %w", err)
+		if exists {
+			serviceUID = existingUID
+		} else {
+			serviceUID, err = s.serviceRepo.CreateWithObject(ctx, tx, service)
+			if err != nil {
+				return fmt.Errorf("failed to create service: %w", err)
+			}
+
+			if err := s.hostRepo.AddService(ctx, tx, hostUID, serviceUID); err != nil {
+				return fmt.Errorf("failed to link service to host: %w", err)
+			}
+
+			if err := s.serviceRepo.LinkToHost(ctx, tx, serviceUID, hostUID); err != nil {
+				return fmt.Errorf("failed to reverse link service to host: %w", err)
+			}
 		}
 
-		if err := s.serviceRepo.LinkToHost(ctx, tx, serviceUID, hostUID); err != nil {
-			return fmt.Errorf("failed to reverse link domain to host: %w", err)
-		}
 		return nil
 	})
 	return serviceUID, err
-
 }
 
 func (s *HostService) CreateWithUnknownDomain(ctx context.Context, host *model.Host, projectUID string) (string, error) {

@@ -63,6 +63,7 @@ func (h *DomainHandler) AddHost(c *gin.Context) {
 	}
 
 	domainUid := c.Param("domainUID")
+	projectUid := c.Param("projectUID")
 
 	host := &model.Host{
 		IP: request.Ip,
@@ -71,6 +72,7 @@ func (h *DomainHandler) AddHost(c *gin.Context) {
 	_, err := h.domainService.AddHost(
 		c.Request.Context(),
 		domainUid,
+		projectUid,
 		host,
 	)
 

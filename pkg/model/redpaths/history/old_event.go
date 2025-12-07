@@ -1,11 +1,12 @@
-package change
+package history
 
 import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Event struct {
@@ -61,7 +62,7 @@ func (b *EventBuilder) SetSubjectUID(uid string) *EventBuilder {
 	return b
 }
 
-// SetEventType sets the type of change (e.g., node_create, attribute_update)
+// SetEventType sets the type of history (e.g., node_create, attribute_update)
 func (b *EventBuilder) SetEventType(eventType string) *EventBuilder {
 	b.e.EventType = eventType
 	return b
@@ -97,7 +98,7 @@ func (b *EventBuilder) SetNewTargetUID(uid string) *EventBuilder {
 	return b
 }
 
-// SetChangedBy annotates who or what service initiated the change
+// SetChangedBy annotates who or what service initiated the history
 func (b *EventBuilder) SetChangedBy(by string) *EventBuilder {
 	b.e.ChangedBy = &by
 	return b

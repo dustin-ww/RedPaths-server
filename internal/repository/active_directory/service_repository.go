@@ -37,6 +37,10 @@ func (r *DgraphServiceRepository) CreateWithObject(ctx context.Context, tx *dgo.
 	return dgraphutil.CreateEntity(ctx, tx, "Service", service)
 }
 
+func (r *DraphHostRepository) ServiceExistsByPortOnHost(ctx context.Context, tx *dgo.Txn, projectUID, ip string) (bool, error) {
+	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "Host", "ip", ip)
+}
+
 func (r *DgraphServiceRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Service, error) {
 	query := `
         query Service($uid: string) {
@@ -62,7 +66,7 @@ func (r *DgraphServiceRepository) LinkToHost(ctx context.Context, tx *dgo.Txn, s
 	return nil
 }
 
-// TODO -> change runs on hosts (remove s)
+// TODO -> history runs on hosts (remove s)
 func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*model.Service, error) {
 	fields := []string{
 		"uid",

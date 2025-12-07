@@ -384,7 +384,7 @@ func (n *NetworkExplorer) isDomainController(nmapResult scan.NmapScanResult, ip 
 		"88":   true, // Kerberos
 		"389":  true, // LDAP
 		"445":  true, // SMB
-		"464":  true, // Kerberos password change
+		"464":  true, // Kerberos password history
 		"636":  true, // LDAPS
 		"3268": true, // Global Catalog
 		"3269": true, // Global Catalog over SSL
