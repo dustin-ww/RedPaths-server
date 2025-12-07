@@ -2,6 +2,7 @@ package rest
 
 import (
 	"RedPaths-server/internal/rest/handlers"
+	"RedPaths-server/pkg/service"
 	"RedPaths-server/pkg/service/active_directory"
 	"RedPaths-server/pkg/service/redpaths"
 
@@ -16,7 +17,7 @@ func RegisterServerHandlers(router *gin.Engine) {
 	}
 }
 
-func RegisterProjectHandlers(router *gin.Engine, projectService *active_directory.ProjectService, logService *redpaths.LogService, domainService *active_directory.DomainService, hostService *active_directory.HostService, serviceService *active_directory.ServiceService) {
+func RegisterProjectHandlers(router *gin.Engine, projectService *active_directory.ProjectService, logService *service.LogService, domainService *active_directory.DomainService, hostService *active_directory.HostService, serviceService *active_directory.ServiceService) {
 	projectHandler := handlers.NewProjectHandler(projectService)
 	logHandler := handlers.NewLogHandler(logService)
 	domainHandler := handlers.NewDomainHandler(projectService, domainService)

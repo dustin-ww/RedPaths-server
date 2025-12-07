@@ -8,7 +8,7 @@
 <has_redpaths_modules>: [uid] .
 <has_host>: [uid] .
 <belongs_to_domain>: [uid] @reverse .
-<deployed_on_host>: [uid] @reverse .
+<deployed_on_host>: uid @reverse .
 <has_user>: [uid] .
 <has_service>: [uid] .
 <port>: string .
@@ -27,9 +27,11 @@
 <is_assumed_by>: [uid] @reverse .
 
 <last_seen_at>: datetime .
-<last_seen_by>: string.
+<last_seen_by>: string .
 <is_verified>: bool .
 <is_usable>: bool .
+<discovered_at>: datetime .
+<discovered_by>: datetime .
 
 <dns_name>: string @index(exact) .
 <net_bios_name>: string @index(exact) .

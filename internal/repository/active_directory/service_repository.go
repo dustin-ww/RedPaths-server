@@ -45,7 +45,7 @@ func (r *DgraphServiceRepository) Get(ctx context.Context, tx *dgo.Txn, uid stri
                 name
 				dgraph.type
 				port
-                runs_on_hosts { uid }
+                deployed_on_host { uid }
             }
         }`
 
@@ -53,7 +53,7 @@ func (r *DgraphServiceRepository) Get(ctx context.Context, tx *dgo.Txn, uid stri
 }
 
 func (r *DgraphServiceRepository) LinkToHost(ctx context.Context, tx *dgo.Txn, serviceUID, hostUID string) error {
-	relationName := "runs_on_hosts"
+	relationName := "deployed_on_host"
 	log.Printf("LINKING: service %s and host %s", serviceUID, hostUID)
 	err := dgraphutil.AddRelation(ctx, tx, serviceUID, hostUID, relationName)
 	if err != nil {
@@ -69,14 +69,14 @@ func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn,
 		"name",
 		"port",
 		"dgraph.type",
-		"runs_on_hosts { uid }",
+		"deployed_on_host { uid }",
 	}
 
 	services, err := dgraphutil.GetEntitiesByRelation[*model.Service](
 		ctx,
 		tx,
 		"service",
-		"runs_on_hosts",
+		"deployed_on_host",
 		hostUID,
 		fields,
 	)

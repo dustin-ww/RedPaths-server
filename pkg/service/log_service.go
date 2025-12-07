@@ -1,4 +1,4 @@
-package redpaths
+package service
 
 import (
 	"RedPaths-server/internal/db"

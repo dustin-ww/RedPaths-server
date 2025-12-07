@@ -2,6 +2,7 @@ package rest
 
 import (
 	"RedPaths-server/pkg/module_exec"
+	"RedPaths-server/pkg/service"
 	"RedPaths-server/pkg/service/active_directory"
 	"RedPaths-server/pkg/service/redpaths"
 	"fmt"
@@ -52,7 +53,7 @@ func StartServer(port string, postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) {
 	serviceService, err := active_directory.NewServiceService(dgraphCon)
 	moduleExecutor := module_exec.GlobalRegistry
 	redPathsModuleService, err := redpaths.NewModuleService(moduleExecutor, postgresCon)
-	logService, err := redpaths.NewLogService(postgresCon)
+	logService, err := service.NewLogService(postgresCon)
 	if err != nil {
 		log.Fatalf("Failed to initialize ProjectService: %v", err)
 	}

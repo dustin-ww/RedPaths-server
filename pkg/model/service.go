@@ -28,7 +28,7 @@ type Service struct {
 	AccountCanBeDelegated   bool     `json:"accountCanBeDelegated,omitempty"`
 
 	// Reverse
-	RunsOnHosts *utils.UIDRef `json:"runs_on_hosts,omitempty"`
+	DeployedOnHost *utils.UIDRef `json:"deployed_on_host,omitempty"`
 }
 
 type ServiceBuilder struct {
@@ -60,7 +60,7 @@ func (b *ServiceBuilder) WithDType(dType []string) *ServiceBuilder {
 }
 
 func (b *ServiceBuilder) WithRunsOnHosts(hosts *utils.UIDRef) *ServiceBuilder {
-	b.service.RunsOnHosts = hosts
+	b.service.DeployedOnHost = hosts
 	return b
 }
 

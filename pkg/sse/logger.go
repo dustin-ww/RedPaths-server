@@ -2,7 +2,7 @@ package sse
 
 import (
 	"RedPaths-server/pkg/model/events"
-	"RedPaths-server/pkg/service/redpaths"
+	"RedPaths-server/pkg/service"
 	"context"
 	"fmt"
 	"log"
@@ -38,7 +38,7 @@ type SSELogger struct {
 	runID      string
 	projectUID string
 	moduleKey  string
-	logService *redpaths.LogService
+	logService *service.LogService
 
 	store     []rpmodel.LogEntry
 	storeLock sync.RWMutex
@@ -148,7 +148,7 @@ func NewSSELogger(runID string, projectUID string, db *gorm.DB) (*SSELogger, err
 		return nil, fmt.Errorf("runID required")
 	}
 
-	svc, err := redpaths.NewLogService(db)
+	svc, err := service.NewLogService(db)
 	if err != nil {
 		return nil, fmt.Errorf("log service init failed: %w", err)
 	}

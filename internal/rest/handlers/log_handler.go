@@ -2,17 +2,17 @@ package handlers
 
 import (
 	"RedPaths-server/pkg/model/utils/query"
-	"RedPaths-server/pkg/service/redpaths"
+	"RedPaths-server/pkg/service"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 type LogHandler struct {
-	logService *redpaths.LogService
+	logService *service.LogService
 }
 
-func NewLogHandler(logService *redpaths.LogService) *LogHandler {
+func NewLogHandler(logService *service.LogService) *LogHandler {
 	return &LogHandler{
 		logService: logService,
 	}
