@@ -2,8 +2,10 @@
 package redpaths
 
 import (
+	"RedPaths-server/internal/recom"
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/events"
+	"RedPaths-server/pkg/model/redpaths"
 	"RedPaths-server/pkg/model/redpaths/input"
 	"RedPaths-server/pkg/sse"
 	"context"
@@ -16,7 +18,7 @@ import (
 )
 
 // RunAttackVector runs an attack vector starting with the target module
-func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey string, params *input.Parameter, executor interfaces.ModuleExecutor) error {
+func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey string, params *input.Parameter, executor interfaces.ModuleExecutor, recommender *recom.Engine) (string, error) {
 	// Generate a unique run ID
 	runID := uuid.New().String()
 	log.Println("Starting Execution with runID: " + runID)
@@ -31,7 +33,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 	// Initialize the logger for this run
 	logger := sse.GetLogger(runID, params.ProjectUID, postgresCon)
 	if logger == nil {
-		return fmt.Errorf("failed to initialize logger for run %s", runID)
+		return "", fmt.Errorf("failed to initialize logger for run %s", runID)
 	}
 	defer func() {
 		// Optional: Keep logger active for a while to allow clients to fetch final logs
@@ -49,12 +51,12 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 	moduleLogger.Info("Starting module execution")
 
 	// Initialize module service
-	moduleService, err := NewModuleService(nil, postgresCon)
+	moduleService, err := NewModuleService(nil, nil, postgresCon)
 	if err != nil {
 		logger.Error("Failed to create module service", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return fmt.Errorf("failed to create module service: %w", err)
+		return "", fmt.Errorf("failed to create module service: %w", err)
 	}
 
 	// Get the attack vector modules
@@ -64,7 +66,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 			"moduleKey": targetModuleKey,
 			"error":     err.Error(),
 		})
-		return fmt.Errorf("failed to get attack vector: %w", err)
+		return "", fmt.Errorf("failed to get attack vector: %w", err)
 	}
 
 	// Log number of modules to execute
@@ -74,6 +76,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 	//startTime := time.Now()
 
 	// Execute each module in the attack vector
+	var lastExecutedModule *redpaths.Module
 	for i, module := range moduleDependencies {
 		// Create module-specific logger for each module
 		currentModuleLogger := logger.ForModule(module.Key)
@@ -108,7 +111,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 				WithData("executionTime", executionTime.Seconds()).
 				WithData("failed", true)
 
-			return fmt.Errorf("failed to execute module %s: %w", module.Key, err)
+			return "", fmt.Errorf("failed to execute module %s: %w", module.Key, err)
 		}
 
 		currentModuleLogger.Info(fmt.Sprintf("Successfully executed module: %s", module.Name),
@@ -123,8 +126,24 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 			WithData("timestamp", time.Now().Unix()).
 			WithData("executionTime", executionTime.Seconds()).
 			WithData("failed", true)
+
+		lastExecutedModule = module
+
+	}
+
+	if lastExecutedModule != nil && recommender != nil {
+		recommendation := recommender.Calculate(lastExecutedModule)
+		if recommendation != nil {
+			logger.SendRecommendation(recommendation.ConfigKey())
+			moduleLogger.Info("Sent recommendation to client", map[string]interface{}{
+				"recommendedModule": recommendation.ConfigKey(),
+			})
+			log.Printf("Sent recommendation to client: %s for run: %s, with last executed module: %s", recommendation.ConfigKey(), runID, lastExecutedModule.Name)
+		}
+	} else {
+		log.Printf("No recommended module found for run: %s", runID)
 	}
 
 	moduleLogger.Info("Attack vector execution completed successfully")
-	return nil
+	return runID, nil
 }

@@ -161,6 +161,55 @@ func TriggerEventHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func RecommendationSSEHandler(w http.ResponseWriter, r *http.Request) {
+	// SSE Headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	runID := r.URL.Query().Get("runId")
+	if runID == "" {
+		sendErrorResponse(w, "runId required", http.StatusBadRequest, "")
+		return
+	}
+
+	logger := GetLogger(runID, "", ssePostgresCon)
+	if logger == nil {
+		sendErrorResponse(w, "Logger not available", http.StatusInternalServerError, "")
+		return
+	}
+
+	client := logger.RegisterRecommendationClient()
+	defer logger.UnregisterRecommendationClient(client)
+
+	ctx := r.Context()
+
+	// Connected event
+	fmt.Fprintf(w, "event: connected\n")
+	fmt.Fprintf(w, "data: {\"runId\":\"%s\"}\n\n", runID)
+	w.(http.Flusher).Flush()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case moduleKey, ok := <-client:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "event: recommendation\n")
+			fmt.Fprintf(w, "data: \"%s\"\n\n", moduleKey)
+			w.(http.Flusher).Flush()
+		}
+	}
+}
+
 // LogsHandler lists recent logs with pagination support
 func LogsHandler(w http.ResponseWriter, r *http.Request) {
 	// CORS headers

@@ -2,6 +2,7 @@ package redpaths
 
 import (
 	"RedPaths-server/internal/db"
+	"RedPaths-server/internal/recom"
 	rp "RedPaths-server/internal/repository/redpaths"
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/redpaths"
@@ -17,14 +18,16 @@ type ModuleService struct {
 	db                 *gorm.DB
 	redPathsModuleRepo rp.RedPathsModuleRepository
 	attackRunner       interfaces.ModuleExecutor // Add this back
+	recommender        *recom.Engine
 }
 
-func NewModuleService(attackRunner interfaces.ModuleExecutor, postgresCon *gorm.DB) (*ModuleService, error) {
+func NewModuleService(attackRunner interfaces.ModuleExecutor, recommender *recom.Engine, postgresCon *gorm.DB) (*ModuleService, error) {
 
 	return &ModuleService{
 		db:                 postgresCon,
 		redPathsModuleRepo: rp.NewPostgresRedPathsModuleRepository(),
 		attackRunner:       attackRunner, // Store the executor
+		recommender:        recommender,
 	}, nil
 }
 
@@ -154,18 +157,21 @@ func (s *ModuleService) GetInheritanceGraph(ctx context.Context) (*redpaths.Inhe
 	})
 }
 
-func (s *ModuleService) RunAttackVector(ctx context.Context, key string, params *input.Parameter) error {
-	return db.ExecutePostgresInTransaction(ctx, s.db, func(tx *gorm.DB) error {
+func (s *ModuleService) RunAttackVector(ctx context.Context, key string, params *input.Parameter) (string, error) {
+	var runUid string
+	err := db.ExecutePostgresInTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		// Use the attackRunner that was injected into the service
 		if s.attackRunner == nil {
 			panic("IST NULL")
 		}
-		err := RunAttackVector(ctx, s.db, key, params, s.attackRunner)
+		var err error
+		runUid, err = RunAttackVector(ctx, s.db, key, params, s.attackRunner, s.recommender)
 		if err != nil {
 			return err
 		}
 		return nil
 	})
+	return runUid, err
 }
 
 func (s *ModuleService) GetOptionsForAttackVector(ctx context.Context, moduleKey string) ([]*redpaths.ModuleOption, error) {

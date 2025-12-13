@@ -80,6 +80,7 @@ CREATE TABLE redpaths_module_last_runs
     parameter jsonb
 );
 
+
 CREATE TABLE redpaths_module_logs (
     id INT GENERATED ALWAYS AS IDENTITY,
     project_uid VARCHAR(255),

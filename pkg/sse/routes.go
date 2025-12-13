@@ -2,8 +2,9 @@ package sse
 
 import (
 	"fmt"
-	"gorm.io/gorm"
 	"net/http"
+
+	"gorm.io/gorm"
 )
 
 func StartServer(port string, postgresCon *gorm.DB) {
@@ -12,6 +13,7 @@ func StartServer(port string, postgresCon *gorm.DB) {
 
 	http.HandleFunc("/sse", SSEHandler)
 	http.HandleFunc("/trigger", TriggerEventHandler)
+	http.HandleFunc("/recommendation", RecommendationSSEHandler)
 
 	fmt.Printf("SSE server running on :%s\n", port)
 	http.ListenAndServe(":"+port, nil)

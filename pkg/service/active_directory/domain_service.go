@@ -28,21 +28,21 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 	}, nil
 }
 
-func (s *DomainService) AddHost(ctx context.Context, domainUID string, projectUID string, host *model.Host) (string, error) {
+func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *model.Host) (string, error) {
 	var hostUID string
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
-		hostsExists, err := s.hostRepo.HostExistsByIP(ctx, tx, projectUID, host.IP)
-		if err != nil {
+		//hostsExists, err := s.hostRepo.HostExistsByIP(ctx, tx, projectUID, host.IP)
+		/*if err != nil {
 			return fmt.Errorf("check if hosts already exists in a domain failed with: %w", err)
 		}
 
 		if hostsExists {
 			log.Printf("host with name %s and ip %s walready exists in a domain", host.Name, host.IP)
 			return nil
-		}
+		}*/
 
-		hostUID, err = s.hostRepo.Create(ctx, tx, host)
+		hostUID, err := s.hostRepo.Create(ctx, tx, host)
 		if err != nil {
 			return fmt.Errorf("failed to create host: %w", err)
 		}

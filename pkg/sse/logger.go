@@ -30,15 +30,19 @@ type SSEEvent struct {
 
 // SSELogger handles logging, storage and SSE dispatch
 type SSELogger struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	clients    sync.Map // map[chan SSEEvent]rpmodel.LogLevel
-	eventBus   chan SSEEvent
-	eventID    int
-	runID      string
-	projectUID string
-	moduleKey  string
-	logService *service.LogService
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	clients               sync.Map // map[chan SSEEvent]rpmodel.LogLevel
+	recommendationClients sync.Map
+	eventBus              chan SSEEvent
+	eventID               int
+	runID                 string
+	projectUID            string
+	moduleKey             string
+	logService            *service.LogService
+
+	lastRecommendation *string
+	recLock            sync.RWMutex
 
 	store     []rpmodel.LogEntry
 	storeLock sync.RWMutex
@@ -232,6 +236,46 @@ func (l *SSELogger) UnregisterClient(ch chan SSEEvent) {
 	l.lastActive = time.Now()
 }
 
+func (l *SSELogger) RegisterRecommendationClient() chan string {
+	ch := make(chan string, 10)
+	l.recommendationClients.Store(ch, struct{}{})
+	l.lastActive = time.Now()
+
+	l.recLock.RLock()
+	if l.lastRecommendation != nil {
+		ch <- *l.lastRecommendation
+	}
+	l.recLock.RUnlock()
+
+	return ch
+}
+
+func (l *SSELogger) SendRecommendation(moduleKey string) {
+	log.Printf("[SSE] Sending recommendation: %s (runID=%s)", moduleKey, l.runID)
+	l.lastActive = time.Now()
+
+	l.recLock.Lock()
+	l.lastRecommendation = &moduleKey
+	l.recLock.Unlock()
+
+	l.recommendationClients.Range(func(key, _ interface{}) bool {
+		ch := key.(chan string)
+		select {
+		case ch <- moduleKey:
+		default:
+			log.Printf("[SSE] Recommendation client slow, removing")
+			l.UnregisterRecommendationClient(ch)
+		}
+		return true
+	})
+}
+
+func (l *SSELogger) UnregisterRecommendationClient(ch chan string) {
+	l.recommendationClients.Delete(ch)
+	close(ch)
+	l.lastActive = time.Now()
+}
+
 // Info logs an INFO level message
 func (l *SSELogger) Info(msg string, payload ...interface{}) {
 	var data interface{}
@@ -301,6 +345,7 @@ func (l *SSELogger) Log(level rpmodel.LogLevel, msg string, payload interface{})
 
 // Event sends a custom event
 func (l *SSELogger) Event(eventType events.EventType, payload interface{}) {
+	log.Printf("[SSE] Event called: type=%s, runID=%s", eventType.String(), l.runID)
 	l.lastActive = time.Now()
 
 	entry := rpmodel.LogEntry{
@@ -333,6 +378,7 @@ func (l *SSELogger) Event(eventType events.EventType, payload interface{}) {
 func (l *SSELogger) sendEvent(eventType string, payload interface{}) {
 	l.eventID++
 	ev := SSEEvent{Type: eventType, Payload: payload, ID: l.eventID, RunID: l.runID}
+	log.Printf("[SSE] sendEvent: type=%s, id=%d, runID=%s", eventType, l.eventID, l.runID)
 	select {
 	case l.eventBus <- ev:
 	case <-l.ctx.Done():

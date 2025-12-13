@@ -56,9 +56,6 @@ func (h *RedPathsModuleHandler) RunAttackVector(c *gin.Context) {
 		return
 	}
 
-	log.Printf("REQUEST")
-	log.Printf(string(body))
-
 	params, err := input.ParseParameters(body)
 	log.Printf(params.ProjectUID)
 	if err != nil {
@@ -68,12 +65,15 @@ func (h *RedPathsModuleHandler) RunAttackVector(c *gin.Context) {
 		return
 	}
 
-	if err := h.redPathsModuleService.RunAttackVector(c.Request.Context(), moduleKey, &params); err != nil {
+	runUid, err := h.redPathsModuleService.RunAttackVector(c.Request.Context(), moduleKey, &params)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{})
+	c.JSON(http.StatusOK, gin.H{
+		"runUid": runUid,
+	})
 }
 
 func (h *RedPathsModuleHandler) GetAttackVectorOptions(c *gin.Context) {

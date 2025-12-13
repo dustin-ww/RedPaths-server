@@ -1,6 +1,7 @@
 package enumeration
 
 import (
+	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/redpaths/input"
 	"RedPaths-server/pkg/model/rpsdk"
 	plugin "RedPaths-server/pkg/module_exec"
@@ -31,6 +32,10 @@ func (n *DNSExplorer) ConfigKey() string {
 
 func (n *DNSExplorer) SetServices(services *rpsdk.Services) {
 	n.services = services
+}
+
+func (n *DNSExplorer) GetMetadata() *interfaces.ModuleMetadata {
+	return nil
 }
 
 // THIS METHOD IS CALLED BY THE REDPATHS SERVER

@@ -2,6 +2,7 @@ package module_exec
 
 import (
 	"RedPaths-server/internal/config"
+	"RedPaths-server/internal/recom"
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/redpaths"
 	"RedPaths-server/pkg/model/rpsdk"
@@ -16,13 +17,14 @@ import (
 )
 
 type Registry struct {
-	modules         map[string]*redpaths.Module
-	implementations map[string]interfaces.RedPathsModule
-	moduleService   *redpaths2.ModuleService
-	serviceFactory  func() *rpsdk.Services
-	initialized     bool
-	pendingModules  map[string]*pendingModuleInfo
-	mu              sync.RWMutex // Race Condition Protection
+	modules              map[string]*redpaths.Module
+	implementations      map[string]interfaces.RedPathsModule
+	moduleService        *redpaths2.ModuleService
+	serviceFactory       func() *rpsdk.Services
+	initialized          bool
+	pendingModules       map[string]*pendingModuleInfo
+	mu                   sync.RWMutex // Race Condition Protection
+	RecommendationEngine *recom.Engine
 }
 
 type pendingModuleInfo struct {
@@ -46,12 +48,14 @@ func InitializeRegistry(postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) error {
 		return nil
 	}
 
-	moduleService, err := redpaths2.NewModuleService(GlobalRegistry, postgresCon)
+	recomEngine := recom.NewEngine(postgresCon)
+	moduleService, err := redpaths2.NewModuleService(GlobalRegistry, recomEngine, postgresCon)
 	if err != nil {
 		return fmt.Errorf("failed to create module service: %w", err)
 	}
 
 	GlobalRegistry.moduleService = moduleService
+	GlobalRegistry.RecommendationEngine = recomEngine
 	GlobalRegistry.serviceFactory = func() *rpsdk.Services {
 		return rpsdk.NewServicesContainer(dgraphCon)
 	}
@@ -147,6 +151,15 @@ func CompleteRegistration() error {
 			}
 		}
 	}
+
+	log.Println("Phase 3: Registering modules with recommendation engine...")
+
+	GlobalRegistry.mu.Lock()
+	for key, impl := range GlobalRegistry.implementations {
+		GlobalRegistry.RecommendationEngine.RegisterModule(key, impl)
+		log.Printf("Registered module %s with recommendation engine", key)
+	}
+	GlobalRegistry.mu.Unlock()
 
 	GlobalRegistry.mu.Lock()
 	GlobalRegistry.pendingModules = make(map[string]*pendingModuleInfo)

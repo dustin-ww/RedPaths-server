@@ -43,6 +43,10 @@ func (n *NetworkExplorer) SetServices(services *rpsdk.Services) {
 	n.services = services
 }
 
+func (n *NetworkExplorer) GetMetadata() *interfaces.ModuleMetadata {
+	return nil
+}
+
 func (n *NetworkExplorer) ConfigKey() string {
 	return n.configKey
 }
