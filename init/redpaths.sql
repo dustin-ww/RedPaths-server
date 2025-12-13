@@ -80,6 +80,13 @@ CREATE TABLE redpaths_module_last_runs
     parameter jsonb
 );
 
+CREATE TABLE redpaths_vector_runs
+(
+    uid VARCHAR,
+    ran_at TIMESTAMP,
+    project_uid VARCHAR,
+    graph jsonb
+);
 
 CREATE TABLE redpaths_module_logs (
     id INT GENERATED ALWAYS AS IDENTITY,
