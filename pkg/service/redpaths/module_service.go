@@ -17,6 +17,7 @@ import (
 type ModuleService struct {
 	db                 *gorm.DB
 	redPathsModuleRepo rp.RedPathsModuleRepository
+	redPathsVectorRepo rp.RedPathsVectorRepository
 	attackRunner       interfaces.ModuleExecutor // Add this back
 	recommender        *recom.Engine
 }
@@ -26,9 +27,16 @@ func NewModuleService(attackRunner interfaces.ModuleExecutor, recommender *recom
 	return &ModuleService{
 		db:                 postgresCon,
 		redPathsModuleRepo: rp.NewPostgresRedPathsModuleRepository(),
+		redPathsVectorRepo: rp.NewPostgresRedPathsVectorRepository(),
 		attackRunner:       attackRunner, // Store the executor
 		recommender:        recommender,
 	}, nil
+}
+
+func (s *ModuleService) GetInheritanceSubgraph(ctx context.Context, moduleKey string, direction rp.GraphDirection, maxDepth *int) (*redpaths.InheritanceGraph, error) {
+	return db.ExecutePostgresRead(ctx, s.db, func(tx *gorm.DB) (*redpaths.InheritanceGraph, error) {
+		return s.redPathsModuleRepo.GetInheritanceSubgraph(ctx, tx, moduleKey, direction, maxDepth)
+	})
 }
 
 func (s *ModuleService) CreateWithObject(ctx context.Context, module *redpaths.Module) (string, error) {
@@ -62,6 +70,16 @@ func (s *ModuleService) CreateWithObject(ctx context.Context, module *redpaths.M
 	})
 
 	return attackID, err
+}
+
+func (s *ModuleService) CreateModuleRun(ctx context.Context, runMetadata *redpaths.ModuleRun) error {
+	return db.ExecutePostgresInTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		err := s.redPathsModuleRepo.AddRun(ctx, tx, runMetadata)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (s *ModuleService) CreateModuleInheritanceEdges(ctx context.Context, inheritanceEdges []*redpaths.ModuleDependency) error {
@@ -106,6 +124,37 @@ func (s *ModuleService) GetAll(ctx context.Context) ([]*redpaths.Module, error) 
 		}
 
 		return modules, nil
+	})
+}
+
+func (s *ModuleService) GetAllRunMetadata(ctx context.Context, projectUID string) ([]*redpaths.ModuleRun, error) {
+	return db.ExecutePostgresRead(ctx, s.db, func(db *gorm.DB) ([]*redpaths.ModuleRun, error) {
+		runs, err := s.redPathsModuleRepo.GetAllModuleRuns(ctx, db, projectUID)
+		if err != nil {
+			return nil, err
+		}
+		return runs, nil
+	})
+}
+
+// TODO: refactor to dedicated service
+func (s *ModuleService) GetAllVectorRuns(ctx context.Context, projectUID string) ([]*redpaths.VectorRun, error) {
+	return db.ExecutePostgresRead(ctx, s.db, func(db *gorm.DB) ([]*redpaths.VectorRun, error) {
+		vruns, err := s.redPathsVectorRepo.GetAllVectorRuns(ctx, db, projectUID)
+		if err != nil {
+			return nil, err
+		}
+		return vruns, nil
+	})
+}
+
+func (s *ModuleService) CreateVectorRun(ctx context.Context, vectorMetadata *redpaths.VectorRun) error {
+	return db.ExecutePostgresInTransaction(ctx, s.db, func(tx *gorm.DB) error {
+		err := s.redPathsVectorRepo.AddRun(ctx, tx, vectorMetadata)
+		if err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
@@ -157,15 +206,34 @@ func (s *ModuleService) GetInheritanceGraph(ctx context.Context) (*redpaths.Inhe
 	})
 }
 
+func (s *ModuleService) GetInheritanceGraphForModule(ctx context.Context, moduleKey string) (*redpaths.InheritanceGraph, error) {
+	return db.ExecutePostgresRead(ctx, s.db, func(db *gorm.DB) (*redpaths.InheritanceGraph, error) {
+		var inheritanceGraph redpaths.InheritanceGraph
+
+		modules, err := s.redPathsModuleRepo.GetAll(ctx, db)
+		if err != nil {
+			return nil, fmt.Errorf("error while fetching all redpaths modulelib %s", err)
+		}
+		inheritanceGraph.Nodes = modules
+		edges, err := s.redPathsModuleRepo.GetAllDependencies(ctx, db)
+		if err != nil {
+			return nil, fmt.Errorf("error while fetching all dependencies of redpaths modulelib for graph edges %s", err)
+		}
+		inheritanceGraph.Edges = edges
+		return &inheritanceGraph, nil
+	})
+}
+
 func (s *ModuleService) RunAttackVector(ctx context.Context, key string, params *input.Parameter) (string, error) {
 	var runUid string
 	err := db.ExecutePostgresInTransaction(ctx, s.db, func(tx *gorm.DB) error {
 		// Use the attackRunner that was injected into the service
 		if s.attackRunner == nil {
-			panic("IST NULL")
+			return fmt.Errorf("error while executing attack vector: the runner engine seems to be nil")
 		}
 		var err error
-		runUid, err = RunAttackVector(ctx, s.db, key, params, s.attackRunner, s.recommender)
+		// TODO: Change Params
+		runUid, err = RunAttackVector(ctx, s.db, key, params, s.attackRunner, s.recommender, s)
 		if err != nil {
 			return err
 		}

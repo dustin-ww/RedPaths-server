@@ -64,6 +64,7 @@ func NewProjectService(dgraphCon *dgo.Dgraph) (*ProjectService, error) {
 func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, domain *model.Domain) (string, error) {
 	var domainUID string
 
+	log.Printf("[AddDomain] domain.Name=%s, projectUID=%s", domain.Name, projectUID)
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 		// check if domain already exists
 		existingDomain, err := s.getDomainIfExists(ctx, tx, projectUID, domain.Name)
@@ -92,7 +93,7 @@ func (s *ProjectService) getDomainIfExists(ctx context.Context, tx *dgo.Txn, pro
 	}
 
 	log.Println("domain with name " + domainName + " already exists. Skipping!")
-	domain, err := s.domainRepo.GetByName(ctx, tx, domainName)
+	domain, err := s.domainRepo.GetByName(ctx, tx, projectUID, domainName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get domain with name %s: %w", domainName, err)
 	}

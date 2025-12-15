@@ -3,6 +3,7 @@ package redpaths
 
 import (
 	"RedPaths-server/internal/recom"
+	rp "RedPaths-server/internal/repository/redpaths"
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/events"
 	"RedPaths-server/pkg/model/redpaths"
@@ -18,22 +19,34 @@ import (
 )
 
 // RunAttackVector runs an attack vector starting with the target module
-func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey string, params *input.Parameter, executor interfaces.ModuleExecutor, recommender *recom.Engine) (string, error) {
+func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey string, params *input.Parameter, executor interfaces.ModuleExecutor, recommender *recom.Engine, moduleService *ModuleService) (string, error) {
 	// Generate a unique run ID
-	runID := uuid.New().String()
-	log.Println("Starting Execution with runID: " + runID)
+	vectorRunID := uuid.New().String()
+	log.Println("Starting Execution with vectorRunID: " + vectorRunID)
+
+	log.Println("Starting Execution by building subgraph for vector run entry")
+	depth := 10
+	subGraph, err := moduleService.GetInheritanceSubgraph(ctx, targetModuleKey, rp.GraphDownstream, &depth)
+	if err != nil {
+		return "", fmt.Errorf("failed to get subgraph: %w", err)
+	}
+	vectorRun := redpaths.NewVectorRunBuilder().WithRunUID(vectorRunID).WithProjectUID(params.ProjectUID).WithGraph(subGraph).Build()
+	err = moduleService.CreateVectorRun(ctx, vectorRun)
+	if err != nil {
+		return "", fmt.Errorf("failed to create vector run: %w", err)
+	}
 
 	// Initialize parameters if nil
 	if params == nil {
 		params = &input.Parameter{}
 	}
-	params.RunID = runID
+	params.RunID = vectorRunID
 
 	log.Println("Starting Execution with projectUID: " + params.ProjectUID)
 	// Initialize the logger for this run
-	logger := sse.GetLogger(runID, params.ProjectUID, postgresCon)
+	logger := sse.GetLogger(vectorRunID, params.ProjectUID, postgresCon)
 	if logger == nil {
-		return "", fmt.Errorf("failed to initialize logger for run %s", runID)
+		return "", fmt.Errorf("failed to initialize logger for run %s", vectorRunID)
 	}
 	defer func() {
 		// Optional: Keep logger active for a while to allow clients to fetch final logs
@@ -42,7 +55,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 
 	// Log the start of the attack vector execution
 	sse.NewEvent(events.ModuleStart).
-		WithData("runId", runID).
+		WithData("runId", vectorRunID).
 		WithData("timestamp", time.Now().Unix()).
 		WithData("module", targetModuleKey)
 
@@ -51,7 +64,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 	moduleLogger.Info("Starting module execution")
 
 	// Initialize module service
-	moduleService, err := NewModuleService(nil, nil, postgresCon)
+	moduleService, err = NewModuleService(nil, nil, postgresCon)
 	if err != nil {
 		logger.Error("Failed to create module service", map[string]interface{}{
 			"error": err.Error(),
@@ -78,6 +91,9 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 	// Execute each module in the attack vector
 	var lastExecutedModule *redpaths.Module
 	for i, module := range moduleDependencies {
+		moduleRunID := uuid.New().String()
+		moduleRunSuccessful := false
+
 		// Create module-specific logger for each module
 		currentModuleLogger := logger.ForModule(module.Key)
 
@@ -93,6 +109,9 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 		moduleStartTime := time.Now()
 
 		err := executor.ExecuteModule(module.Key, params, currentModuleLogger)
+		if err != nil {
+			moduleRunSuccessful = true
+		}
 		executionTime := time.Since(moduleStartTime)
 
 		if err != nil {
@@ -105,13 +124,20 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 
 			// Send run_error event
 			sse.NewEvent(events.ModuleError).
-				WithData("runId", runID).
+				WithData("runId", vectorRunID).
 				WithData("timestamp", time.Now().Unix()).
 				WithData("error", err.Error()).
 				WithData("executionTime", executionTime.Seconds()).
 				WithData("failed", true)
 
 			return "", fmt.Errorf("failed to execute module %s: %w", module.Key, err)
+		}
+
+		var moduleRun *redpaths.ModuleRun
+		moduleRun, err = redpaths.NewModuleRunBuilder().ModuleKey(module.Key).RunUID(moduleRunID).ProjectUID(params.ProjectUID).WasSuccessful(moduleRunSuccessful).Parameters(nil).Targets(nil).VectorRunUID(vectorRunID).Build()
+		err = moduleService.CreateModuleRun(ctx, moduleRun)
+		if err != nil {
+			return "", fmt.Errorf("error while creating new module run metadata in vector runner engine: %s", err)
 		}
 
 		currentModuleLogger.Info(fmt.Sprintf("Successfully executed module: %s", module.Name),
@@ -122,7 +148,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 
 		// Send module_complete event
 		sse.NewEvent(events.ModuleComplete).
-			WithData("runId", runID).
+			WithData("runId", vectorRunID).
 			WithData("timestamp", time.Now().Unix()).
 			WithData("executionTime", executionTime.Seconds()).
 			WithData("failed", true)
@@ -138,12 +164,12 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 			moduleLogger.Info("Sent recommendation to client", map[string]interface{}{
 				"recommendedModule": recommendation.ConfigKey(),
 			})
-			log.Printf("Sent recommendation to client: %s for run: %s, with last executed module: %s", recommendation.ConfigKey(), runID, lastExecutedModule.Name)
+			log.Printf("Sent recommendation to client: %s for run: %s, with last executed module: %s", recommendation.ConfigKey(), vectorRunID, lastExecutedModule.Name)
 		}
 	} else {
-		log.Printf("No recommended module found for run: %s", runID)
+		log.Printf("No recommended module found for run: %s", vectorRunID)
 	}
 
 	moduleLogger.Info("Attack vector execution completed successfully")
-	return runID, nil
+	return vectorRunID, nil
 }

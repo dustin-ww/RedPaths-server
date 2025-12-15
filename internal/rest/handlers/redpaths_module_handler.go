@@ -87,6 +87,28 @@ func (h *RedPathsModuleHandler) GetAttackVectorOptions(c *gin.Context) {
 	c.JSON(http.StatusOK, options)
 }
 
+func (h *RedPathsModuleHandler) GetModuleRuns(c *gin.Context) {
+	projectUid := c.Param("projectUID")
+	runMetadata, err := h.redPathsModuleService.GetAllRunMetadata(c.Request.Context(), projectUid)
+	if err != nil {
+		log.Printf("failed to get all module runs for project %s with error: %v", projectUid, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, runMetadata)
+}
+
+func (h *RedPathsModuleHandler) GetVectorRuns(c *gin.Context) {
+	projectUid := c.Param("projectUID")
+	vrunMetadata, err := h.redPathsModuleService.GetAllVectorRuns(c.Request.Context(), projectUid)
+	if err != nil {
+		log.Printf("failed to get all vector runs for project %s with error: %v", projectUid, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, vrunMetadata)
+}
+
 func (h *RedPathsModuleHandler) GetModuleOptions(c *gin.Context) {
 	panic("not implemented")
 }

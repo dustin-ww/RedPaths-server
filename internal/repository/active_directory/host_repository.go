@@ -15,7 +15,7 @@ type HostRepository interface {
 	SetDomainController(ctx context.Context, hostUID string, isDC bool) error
 	AddService(ctx context.Context, tx *dgo.Txn, hostUID, serviceUID string) error
 	AddToDomain(ctx context.Context, tx *dgo.Txn, hostUID string, domainUID string) error
-	HostExistsByIP(ctx context.Context, tx *dgo.Txn, projectUID, ip string) (bool, error)
+	HostExistsByIP(ctx context.Context, tx *dgo.Txn, domainUID string, ip string) (bool, error)
 
 	// HOSTS WITH UNDEFINED DOMAIN
 	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error)
@@ -27,8 +27,8 @@ type DraphHostRepository struct {
 	DB *dgo.Dgraph
 }
 
-func (r *DraphHostRepository) HostExistsByIP(ctx context.Context, tx *dgo.Txn, projectUID, ip string) (bool, error) {
-	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "Host", "ip", ip)
+func (r *DraphHostRepository) HostExistsByIP(ctx context.Context, tx *dgo.Txn, domainUID string, ip string) (bool, error) {
+	return dgraphutil.ExistsByFieldInDomain(ctx, tx, domainUID, "Host", "ip", ip)
 }
 
 func NewDgraphHostRepository(db *dgo.Dgraph) *DraphHostRepository {

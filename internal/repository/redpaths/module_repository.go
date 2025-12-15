@@ -14,7 +14,48 @@ const (
 	TableModules            = "redpaths_modules"
 	TableModuleDependencies = "redpaths_modules_dependencies"
 	TableModuleOptions      = "redpaths_modules_options"
+	TableModuleRuns         = "redpaths_modules_runs"
 )
+
+type GraphDirection string
+
+const (
+	GraphUpstream   GraphDirection = "upstream"
+	GraphDownstream GraphDirection = "downstream"
+	GraphBoth       GraphDirection = "both"
+)
+
+const upstreamCTE = `
+WITH RECURSIVE graph AS (
+	SELECT previous_module, next_module, 1 AS depth
+	FROM redpaths_modules_dependencies
+	WHERE next_module = $1
+
+	UNION ALL
+
+	SELECT d.previous_module, d.next_module, g.depth + 1
+	FROM redpaths_modules_dependencies d
+	JOIN graph g ON d.next_module = g.previous_module
+	WHERE ($2::int IS NULL OR g.depth < $2)
+)
+SELECT DISTINCT previous_module, next_module FROM graph;
+`
+
+const downstreamCTE = `
+WITH RECURSIVE graph AS (
+	SELECT previous_module, next_module, 1 AS depth
+	FROM redpaths_modules_dependencies
+	WHERE previous_module = $1
+
+	UNION ALL
+
+	SELECT d.previous_module, d.next_module, g.depth + 1
+	FROM redpaths_modules_dependencies d
+	JOIN graph g ON d.previous_module = g.next_module
+	WHERE ($2::int IS NULL OR g.depth < $2)
+)
+SELECT DISTINCT previous_module, next_module FROM graph;
+`
 
 type RedPathsModuleRepository interface {
 
@@ -29,16 +70,101 @@ type RedPathsModuleRepository interface {
 	AddDependency(ctx context.Context, tx *gorm.DB, previousModuleKey, nextModuleKey string) (string, error)
 	GetAllDependencies(ctx context.Context, tx *gorm.DB) ([]*redpaths.ModuleDependency, error)
 	GetOrderedDependencies(ctx context.Context, tx *gorm.DB, moduleKey string) ([]string, error)
+	GetInheritanceSubgraph(ctx context.Context, tx *gorm.DB, moduleKey string, direction GraphDirection, maxDepth *int) (*redpaths.InheritanceGraph, error)
 
 	// module options
 	AddOption(ctx context.Context, tx *gorm.DB, moduleOption *redpaths.ModuleOption) error
 	GetOptions(ctx context.Context, tx *gorm.DB, moduleKey string) ([]*redpaths.ModuleOption, error)
 
 	// module history
-
+	AddRun(ctx context.Context, tx *gorm.DB, runMetadata *redpaths.ModuleRun) error
+	GetAllModuleRuns(ctx context.Context, tx *gorm.DB, projectUID string) ([]*redpaths.ModuleRun, error)
 }
 
 type PostgresRedPathsModuleRepository struct{}
+
+func (r *PostgresRedPathsModuleRepository) GetInheritanceSubgraph(
+	ctx context.Context,
+	tx *gorm.DB,
+	moduleKey string,
+	direction GraphDirection,
+	maxDepth *int,
+) (*redpaths.InheritanceGraph, error) {
+
+	var edges []*redpaths.ModuleDependency
+	var queries []string
+
+	// Parameter für SQL
+	var maxDepthVal interface{}
+	if maxDepth != nil {
+		maxDepthVal = *maxDepth
+	} else {
+		maxDepthVal = nil
+	}
+
+	// Build query based on direction
+	switch direction {
+	case GraphUpstream:
+		queries = []string{upstreamCTE}
+	case GraphDownstream:
+		queries = []string{downstreamCTE}
+	case GraphBoth:
+		// Upstream + Downstream zusammenführen
+		queries = []string{upstreamCTE, downstreamCTE}
+	default:
+		return nil, fmt.Errorf("unsupported graph direction: %s", direction)
+	}
+
+	edgesMap := make(map[string]*redpaths.ModuleDependency)
+
+	for _, query := range queries {
+		var tmpEdges []*redpaths.ModuleDependency
+		if err := tx.WithContext(ctx).
+			Raw(query, moduleKey, maxDepthVal).
+			Scan(&tmpEdges).Error; err != nil {
+			return nil, fmt.Errorf("failed to get subgraph: %w", err)
+		}
+
+		// Duplikate vermeiden
+		for _, e := range tmpEdges {
+			key := e.PreviousModule + "->" + e.NextModule
+			if _, exists := edgesMap[key]; !exists {
+				edgesMap[key] = e
+			}
+		}
+	}
+
+	// Map zu Slice
+	edges = make([]*redpaths.ModuleDependency, 0, len(edgesMap))
+	keysSet := map[string]struct{}{moduleKey: {}}
+	for _, e := range edgesMap {
+		edges = append(edges, e)
+		keysSet[e.PreviousModule] = struct{}{}
+		keysSet[e.NextModule] = struct{}{}
+	}
+
+	// Module laden
+	var modules []*redpaths.Module
+	if err := tx.WithContext(ctx).
+		Table(TableModules).
+		Where("key IN ?", mapKeys(keysSet)).
+		Find(&modules).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch modules for subgraph: %w", err)
+	}
+
+	return &redpaths.InheritanceGraph{
+		Nodes: modules,
+		Edges: edges,
+	}, nil
+}
+
+func mapKeys(m map[string]struct{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
 
 func (r *PostgresRedPathsModuleRepository) GetOrderedDependencies(ctx context.Context, tx *gorm.DB, moduleKey string) ([]string, error) {
 	// SQL statement for recursive Common Table Expression (CTE)
@@ -198,4 +324,33 @@ func (r *PostgresRedPathsModuleRepository) GetOptions(ctx context.Context, tx *g
 	}
 
 	return options, nil
+}
+
+func (r *PostgresRedPathsModuleRepository) AddRun(ctx context.Context, tx *gorm.DB, runMetadata *redpaths.ModuleRun) error {
+	if runMetadata.ModuleKey == "" {
+		return fmt.Errorf("moduleKey cannot be empty")
+	}
+
+	result := tx.WithContext(ctx).Table(TableModuleRuns).Create(&runMetadata)
+
+	if err := result.Error; err != nil {
+		return fmt.Errorf("failed register new module run: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresRedPathsModuleRepository) GetAllModuleRuns(ctx context.Context, tx *gorm.DB, projectUID string) ([]*redpaths.ModuleRun, error) {
+	var runs []*redpaths.ModuleRun
+
+	result := tx.WithContext(ctx).
+		Table(TableModuleRuns).
+		Where("project_uid = ?", projectUID).
+		Find(&runs)
+
+	if err := result.Error; err != nil {
+		return nil, fmt.Errorf("failed to get module runs for project: %s with error: %s", projectUID, err)
+	}
+
+	return runs, nil
 }

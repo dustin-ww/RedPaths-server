@@ -101,6 +101,10 @@ func RegisterRedPathsModuleHandlers(router *gin.Engine, redPathsModuleService *r
 			}
 
 		}
-
+		projectItemGroup := redPathsGroup.Group("/:projectUID")
+		{
+			projectItemGroup.GET("/vruns", moduleHandler.GetVectorRuns)
+			projectItemGroup.GET("/mruns", moduleHandler.GetModuleRuns)
+		}
 	}
 }

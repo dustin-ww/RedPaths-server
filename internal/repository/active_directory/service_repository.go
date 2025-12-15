@@ -79,7 +79,7 @@ func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn,
 	services, err := dgraphutil.GetEntitiesByRelation[*model.Service](
 		ctx,
 		tx,
-		"service",
+		"Service",
 		"deployed_on_host",
 		hostUID,
 		fields,

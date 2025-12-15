@@ -176,11 +176,13 @@ func (n *NetworkExplorer) buildHost(nmapResult scan.NmapScanResult, ip string, p
 	// Create the host in the appropriate domain
 	var hostUID string
 	if domainUID != "" {
+		log.Printf("Using domain UID: %s", domainUID)
 		hostUID, err = n.services.DomainService.AddHost(ctx, domainUID, host)
 		if err != nil {
 			return "", fmt.Errorf("failed to add host to domain: %v", err)
 		}
 	} else {
+		log.Printf("Using no domain UID because UID is: %s", domainUID)
 		hostUID, err = n.services.HostService.CreateWithUnknownDomain(ctx, host, params.ProjectUID)
 		if err != nil {
 			return "", fmt.Errorf("failed to create host: %v", err)
@@ -245,11 +247,11 @@ func (n *NetworkExplorer) tryToBuildDomain(nmapResult scan.NmapScanResult, ip st
 	for _, strategy := range strategies {
 		for _, port := range ports {
 			xpath := strategy.getXPath(port)
-			log.Printf("Trying XPath", "strategy", strategy.name, "port", port, "xpath", xpath)
+			//log.Printf("Trying XPath", "strategy", strategy.name, "port", port, "xpath", xpath)
 
 			nodes, err := xmlquery.QueryAll(document, xpath)
 			if err != nil {
-				log.Printf("XPath error", "strategy", strategy.name, "xpath", xpath, "error", err)
+				//	log.Printf("XPath error", "strategy", strategy.name, "xpath", xpath, "error", err)
 				continue
 			}
 
@@ -359,9 +361,9 @@ func (n *NetworkExplorer) buildServices(host serializable.Host, hostID string) {
 			if err != nil {
 				log.Printf("error creating service in module network explorer: %v", err)
 				return
-			} else {
-				log.Printf("created service in module network explorer: %s", uid)
 			}
+
+			log.Printf("created service in module network explorer: %s", uid)
 		}
 
 	}

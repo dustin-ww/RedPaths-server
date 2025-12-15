@@ -63,12 +63,16 @@ CREATE TABLE redpaths_modules_options
     PRIMARY KEY (module_key, option_key)
 );
 
-CREATE TABLE redpaths_module_runs
+CREATE TABLE redpaths_modules_runs
 (
     module_key VARCHAR,
     run_uid VARCHAR,
+    vector_run_uid VARCHAR,
     ran_at TIMESTAMP,
-    project_uid VARCHAR
+    project_uid VARCHAR,
+    was_successful BOOLEAN,
+    targets jsonb,
+    parameters jsonb
 );
 
 CREATE TABLE redpaths_module_last_runs
@@ -82,7 +86,7 @@ CREATE TABLE redpaths_module_last_runs
 
 CREATE TABLE redpaths_vector_runs
 (
-    uid VARCHAR,
+    run_uid VARCHAR,
     ran_at TIMESTAMP,
     project_uid VARCHAR,
     graph jsonb

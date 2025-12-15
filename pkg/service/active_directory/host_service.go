@@ -53,6 +53,7 @@ func (s *HostService) AddService(ctx context.Context, hostUID string, service mo
 		}
 
 		if exists {
+			log.Printf("Service already exists")
 			serviceUID = existingUID
 		} else {
 			serviceUID, err = s.serviceRepo.CreateWithObject(ctx, tx, service)

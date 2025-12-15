@@ -16,7 +16,7 @@ type DomainRepository interface {
 	//CRUD
 	Create(ctx context.Context, tx *dgo.Txn, name string) (string, error) // Returns UID
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Domain, error)
-	GetByName(ctx context.Context, tx *dgo.Txn, name string) (*model.Domain, error)
+	GetByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error)
 	UpdateFields(ctx context.Context, uid string, fields map[string]interface{}) error
 	CreateWithObject(ctx context.Context, tx *dgo.Txn, model *model.Domain) (string, error)
 
@@ -57,24 +57,30 @@ func (r *DgraphDomainRepository) CreateWithObject(ctx context.Context, tx *dgo.T
 	return assigned.Uids["blank-0"], nil
 }
 
-func (r *DgraphDomainRepository) GetByName(ctx context.Context, tx *dgo.Txn, name string) (*model.Domain, error) {
-	//TODO: implement
-	fields := []string{
-		"uid",
-		"name",
-	}
-	domains, err := dgraphutil.GetEntityByField[*model.Domain](
+// In DomainRepository:
+func (r *DgraphDomainRepository) GetByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error) {
+	fields := []string{"uid", "name"}
+
+	domains, err := dgraphutil.GetEntityByFieldInProject[*model.Domain](
 		ctx,
 		tx,
+		projectUID,
 		"Domain",
 		"name",
 		name,
 		fields,
 	)
-	// names are unique
-	return domains[0], err
-}
 
+	if err != nil {
+		return nil, err
+	}
+
+	if len(domains) == 0 {
+		return nil, fmt.Errorf("domain not found")
+	}
+
+	return domains[0], nil
+}
 func (r *DgraphDomainRepository) AddToProject(
 	ctx context.Context,
 	tx *dgo.Txn,
@@ -131,7 +137,7 @@ func (r *DgraphDomainRepository) GetByProjectUID(ctx context.Context, tx *dgo.Tx
 	domains, err := dgraphutil.GetEntitiesByRelation[*model.Domain](
 		ctx,
 		tx,
-		"domain",
+		"Domain",
 		"belongs_to_project",
 		projectUID,
 		fields,

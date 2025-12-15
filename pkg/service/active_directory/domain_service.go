@@ -30,19 +30,29 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 
 func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *model.Host) (string, error) {
 	var hostUID string
+	log.Println("[ADD HOST]")
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-
-		//hostsExists, err := s.hostRepo.HostExistsByIP(ctx, tx, projectUID, host.IP)
-		/*if err != nil {
-			return fmt.Errorf("check if hosts already exists in a domain failed with: %w", err)
+		// check if host already exists
+		hostExisting, err := s.hostRepo.HostExistsByIP(ctx, tx, domainUID, host.IP)
+		if err != nil {
+			return fmt.Errorf("host existence check failed: %w", err)
 		}
 
-		if hostsExists {
-			log.Printf("host with name %s and ip %s walready exists in a domain", host.Name, host.IP)
+		if hostExisting {
+			log.Printf("[ADD HOST]: Host already exists with ip: %s in domain %s\n", host.IP, domainUID)
+			var rhosts []*model.Host
+			// TODO: build with direct /**/query
+			rhosts, err = s.hostRepo.GetByDomainUID(ctx, tx, domainUID)
+			for _, rhost := range rhosts {
+				if rhost.IP == host.IP {
+					hostUID = rhost.UID
+					return nil
+				}
+			}
 			return nil
-		}*/
+		}
 
-		hostUID, err := s.hostRepo.Create(ctx, tx, host)
+		hostUID, err = s.hostRepo.Create(ctx, tx, host)
 		if err != nil {
 			return fmt.Errorf("failed to create host: %w", err)
 		}
@@ -65,24 +75,3 @@ func (s *DomainService) GetDomainHosts(ctx context.Context, domainUID string) ([
 		return s.hostRepo.GetByDomainUID(ctx, tx, domainUID)
 	})
 }
-
-/*func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, domain *model.Domain) (string, error) {
-	var domainUID string
-
-	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		// check if domain already exists
-		existingDomain, err := s.getDomainIfExists(ctx, tx, domain.Name)
-		if err != nil {
-			return fmt.Errorf("domain existence check failed: %w", err)
-		}
-
-		if existingDomain != nil {
-			domainUID = existingDomain.UID
-			return nil
-		}
-		return s.createAndLinkDomain(ctx, tx, domain, projectUID, &domainUID)
-	})
-
-	return domainUID, err
-}
-*/
