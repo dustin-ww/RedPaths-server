@@ -21,6 +21,23 @@ CREATE TABLE redpaths_modules_dependencies (
                                      FOREIGN KEY (next_module) REFERENCES redpaths_modules (key)
 );
 
+CREATE TABLE redpaths_changes (
+                         id UUID PRIMARY KEY,
+                         entity_type TEXT NOT NULL,
+                         entity_uid TEXT NOT NULL,
+                         changes JSONB NOT NULL,
+                         changed_at TIMESTAMPTZ NOT NULL,
+
+                         changed_by TEXT,
+                         change_reason TEXT
+);
+
+CREATE INDEX idx_redpaths_changes_entity
+    ON redpaths_changes(entity_type, entity_uid);
+
+CREATE INDEX idx_redpaths_changes_time
+    ON redpaths_changes(changed_at);
+
 
 CREATE TABLE redpaths_modules_metadata (
     project_uid VARCHAR(255),

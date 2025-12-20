@@ -47,7 +47,7 @@ func StartServer(port string, postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) {
 		panic(err)
 	}
 
-	projectService, err := active_directory.NewProjectService(dgraphCon)
+	projectService, err := active_directory.NewProjectService(dgraphCon, postgresCon)
 	domainService, err := active_directory.NewDomainService(dgraphCon)
 	hostService, err := active_directory.NewHostService(dgraphCon)
 	serviceService, err := active_directory.NewServiceService(dgraphCon)

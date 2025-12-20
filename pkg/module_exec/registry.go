@@ -57,7 +57,7 @@ func InitializeRegistry(postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) error {
 	GlobalRegistry.moduleService = moduleService
 	GlobalRegistry.RecommendationEngine = recomEngine
 	GlobalRegistry.serviceFactory = func() *rpsdk.Services {
-		return rpsdk.NewServicesContainer(dgraphCon)
+		return rpsdk.NewServicesContainer(dgraphCon, postgresCon)
 	}
 	GlobalRegistry.initialized = true
 

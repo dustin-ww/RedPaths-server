@@ -1,7 +1,9 @@
 package model
 
 import (
+	"RedPaths-server/pkg/model/redpaths/history"
 	"RedPaths-server/pkg/model/utils"
+	"log"
 	"time"
 )
 
@@ -48,6 +50,42 @@ type Trust struct {
 	Direction     string `json:"direction,omitempty"`  // inbound, outbound, bidirectional
 	TrustType     string `json:"trust_type,omitempty"` // parent-child, cross-forest, external
 	IsTransitive  bool   `json:"is_transitive,omitempty"`
+}
+
+func (d *Domain) EntityUID() string {
+	return d.UID
+}
+
+func (d *Domain) EntityType() string {
+	return "Domain"
+}
+
+func (d *Domain) Diff(other any) []history.FieldChange {
+	o, ok := other.(*Domain)
+	if !ok || o == nil {
+		return nil
+	}
+
+	var changes []history.FieldChange
+
+	if d.Name != o.Name {
+		log.Println("NOT THE SAME")
+		changes = append(changes, history.FieldChange{
+			Field:    "name",
+			OldValue: d.Name,
+			NewValue: o.Name,
+		})
+	}
+
+	if d.DNSName != o.DNSName {
+		changes = append(changes, history.FieldChange{
+			Field:    "description",
+			OldValue: d.DNSName,
+			NewValue: o.DNSName,
+		})
+	}
+
+	return changes
 }
 
 type DomainBuilder struct {

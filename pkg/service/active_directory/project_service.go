@@ -3,6 +3,7 @@ package active_directory
 import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
+	"RedPaths-server/internal/repository/changes"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	"context"
@@ -11,6 +12,7 @@ import (
 	"log"
 
 	"github.com/dgraph-io/dgo/v210/protos/api"
+	"gorm.io/gorm"
 
 	"github.com/dgraph-io/dgo/v210"
 )
@@ -21,18 +23,23 @@ type ProjectService struct {
 	domainRepo  active_directory.DomainRepository
 	hostRepo    active_directory.HostRepository
 	targetRepo  active_directory.TargetRepository
-	db          *dgo.Dgraph
+
+	changeRepo changes.RedPathsChangeRepository
+	db         *dgo.Dgraph
+	pdb        *gorm.DB
 }
 
 // NewProjectService creates a new ProjectService instance
-func NewProjectService(dgraphCon *dgo.Dgraph) (*ProjectService, error) {
+func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectService, error) {
 
 	return &ProjectService{
 		db:          dgraphCon,
+		pdb:         postgresCon,
 		projectRepo: active_directory.NewDgraphProjectRepository(dgraphCon),
 		domainRepo:  active_directory.NewDgraphDomainRepository(dgraphCon),
 		hostRepo:    active_directory.NewDgraphHostRepository(dgraphCon),
 		targetRepo:  active_directory.NewDgraphTargetRepository(dgraphCon),
+		changeRepo:  changes.NewPostgresRedPathsChangesRepository(),
 	}, nil
 }
 
@@ -61,22 +68,35 @@ func NewProjectService(dgraphCon *dgo.Dgraph) (*ProjectService, error) {
 //	})
 //}
 
-func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, domain *model.Domain) (string, error) {
+func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *model.Domain) (string, error) {
 	var domainUID string
 
-	log.Printf("[AddDomain] domain.Name=%s, projectUID=%s", domain.Name, projectUID)
+	log.Printf("[AddDomain] incomingDomain.Name=%s, projectUID=%s", incomingDomain.Name, projectUID)
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		// check if domain already exists
-		existingDomain, err := s.getDomainIfExists(ctx, tx, projectUID, domain.Name)
+		// check if incomingDomain already exists
+		existingDomain, err := s.getDomainIfExists(ctx, tx, projectUID, incomingDomain.Name)
 		if err != nil {
-			return fmt.Errorf("domain existence check failed: %w", err)
+			return fmt.Errorf("incomingDomain existence check failed: %w", err)
 		}
 
+		// Build changes
 		if existingDomain != nil {
+			change := utils.BuildChange(existingDomain, incomingDomain,
+				utils.WithActor("scanner"),
+				utils.WithReason("sync"),
+			)
+
+			if change != nil {
+				err := s.changeRepo.Save(ctx, s.pdb, change)
+				if err != nil {
+					return fmt.Errorf("changeRepo save failed: %w", err)
+				}
+			}
+
 			domainUID = existingDomain.UID
 			return nil
 		}
-		return s.createAndLinkDomain(ctx, tx, domain, projectUID, &domainUID)
+		return s.createAndLinkDomain(ctx, tx, incomingDomain, projectUID, &domainUID)
 	})
 
 	return domainUID, err

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 	"github.com/dgraph-io/dgo/v210/protos/api"
@@ -37,6 +38,12 @@ type DgraphDomainRepository struct {
 }
 
 func (r *DgraphDomainRepository) CreateWithObject(ctx context.Context, tx *dgo.Txn, domain *model.Domain) (string, error) {
+	domain.CreatedAt = time.Now().UTC()
+	domain.DiscoveredAt = time.Now().UTC()
+	domain.DiscoveredBy = "User"
+	domain.LastModified = domain.CreatedAt
+	domain.LastSeenAt = domain.CreatedAt
+	domain.LastSeenBy = "User"
 	domain.DType = []string{"Domain"}
 	domain.UID = "_:blank-0"
 

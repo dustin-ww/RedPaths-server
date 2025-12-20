@@ -3,21 +3,45 @@ package changes
 import (
 	"RedPaths-server/pkg/model/redpaths/history"
 	"context"
+	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 const (
-	TableChangeEvents  = "redpaths_change_event"
-	TableNodeSnapshots = "redpaths_node_snapshot"
+	TableChanges = "redpaths_changes"
 )
 
 type RedPathsChangeRepository interface {
-
-	//CRUD
-	GetAllChangeEventsByProject(ctx context.Context, tx *gorm.DB, projectUID string) ([]*history.Event, error)
-	GetAllEventsByTransaction(ctx context.Context, tx *gorm.DB, moduleRunID string) ([]*history.Event, error)
-	CreateChangeEvent(ctx context.Context, tx *gorm.DB, event *history.Event) error
+	Save(ctx context.Context, tx *gorm.DB, change *history.Change) error
+	GetByEntity(ctx context.Context, tx *gorm.DB, entityType, entityUID string) ([]*history.Change, error)
 }
 
-type PostgresRedPathsModuleRepository struct{}
+type PostgresRedPathsChangesRepository struct{}
+
+func NewPostgresRedPathsChangesRepository() *PostgresRedPathsChangesRepository {
+	return &PostgresRedPathsChangesRepository{}
+}
+
+func (r *PostgresRedPathsChangesRepository) Save(
+	ctx context.Context,
+	tx *gorm.DB,
+	change *history.Change,
+) error {
+
+	if change.UID == uuid.Nil {
+		change.UID = uuid.New()
+	}
+
+	if change.ChangedAt.IsZero() {
+		change.ChangedAt = time.Now().UTC()
+	}
+
+	return tx.WithContext(ctx).Create(change).Error
+}
+
+func (r *PostgresRedPathsChangesRepository) GetByEntity(ctx context.Context, tx *gorm.DB, entityType, entityUID string) ([]*history.Change, error) {
+	//TODO implement me
+	panic("implement me")
+}

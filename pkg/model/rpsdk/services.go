@@ -2,7 +2,10 @@ package rpsdk
 
 import (
 	"RedPaths-server/pkg/service/active_directory"
+
 	"github.com/dgraph-io/dgo/v210"
+	"gorm.io/gorm"
+
 	"log"
 )
 
@@ -12,8 +15,8 @@ type Services struct {
 	HostService    active_directory.HostService
 }
 
-func NewServicesContainer(dgraphCon *dgo.Dgraph) *Services {
-	projectService, err := active_directory.NewProjectService(dgraphCon)
+func NewServicesContainer(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) *Services {
+	projectService, err := active_directory.NewProjectService(dgraphCon, postgresCon)
 	if err != nil {
 		log.Fatalf("Failed to initialize ProjectService for redpaths sdk: %v", err)
 	}
