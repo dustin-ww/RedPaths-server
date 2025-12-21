@@ -57,6 +57,43 @@
 <initialized>: bool .
 <cidr>: int .
 
+<group_name>: string @index(exact) .
+<group_sid>: string @index(exact) .
+<group_scope>: string .
+<group_type>: string .
+
+<has_member>: [uid] @reverse .
+<member_of>: [uid] .
+
+<is_privileged>: bool .
+<is_builtin>: bool .
+
+<privileges>: [string] .
+
+<can_dcsync>: bool .
+<can_rdp>: bool .
+<can_logon_locally>: bool .
+
+<risk_score>: int .
+<risk_reasons>: [string] .
+
+<user_sid>: string @index(exact) .
+<sam_account_name>: string @index(exact) .
+<user_principal_name>: string @index(exact) .
+
+<member_of_group>: [uid] @reverse .
+
+<last_logon>: datetime .
+<pwd_last_set>: datetime .
+<bad_pwd_count>: int .
+
+<is_disabled>: bool .
+<is_locked>: bool .
+<is_service_account>: bool .
+
+<allowed_to_delegate>: bool .
+<has_spn>: bool .
+
 
 type Project {
   name
@@ -163,14 +200,50 @@ type Service {
 
 type User {
   name
+  sam_account_name
+  user_principal_name
+  user_sid
   ntlm_hash
   password
   is_admin
-  belongs_to_domain
-  dgraph.type
   is_usable
+  is_disabled
+  is_locked
+  is_service_account
+  belongs_to_domain
+  member_of_group
+  last_logon
+  pwd_last_set
+  bad_pwd_count
+  allowed_to_delegate
+  has_spn
+  dgraph.type
   discovered_at
   discovered_by
   last_seen_at
   last_seen_by
 }
+
+type Group {
+  group_name
+  group_sid
+  group_scope
+  group_type
+  belongs_to_domain
+  has_member
+  member_of
+  privileges
+  is_privileged
+  is_builtin
+  can_dcsync
+  can_rdp
+  can_logon_locally
+  risk_score
+  risk_reasons
+  dgraph.type
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+}
+

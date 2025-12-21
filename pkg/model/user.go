@@ -1,15 +1,46 @@
 package model
 
-import "time"
+import (
+	"RedPaths-server/pkg/model/utils"
+	"time"
+)
 
-type User struct {
-	UID             string   `json:"uid,omitempty"`
-	Name            string   `json:"name,omitempty"`
-	NTLMHash        string   `json:"ntlm_hash,omitempty"`
-	Password        string   `json:"password,omitempty"`
-	IsAdmin         bool     `json:"is_admin,omitempty"`
-	BelongsToDomain Domain   `json:"belongs_to_domain,omitempty"`
-	DType           []string `json:"dgraph.type,omitempty"`
+type ADUser struct {
+	UID  string
+	Name string
+
+	// Identity
+	SAMAccountName string
+	UPN            string
+	SID            string
+	AccountType    string
+
+	// Credentials
+	Password       string
+	NTLMHash       string
+	CredentialType string
+
+	// Privileges
+	IsAdmin       bool
+	IsDomainAdmin bool
+	MemberOf      []*utils.UIDRef
+
+	// Kerberos
+	SPNs           []string
+	Kerberoastable bool
+	ASREPRoastable bool
+
+	// Delegation
+	TrustedForDelegation    bool
+	UnconstrainedDelegation bool
+
+	// Usage
+	LastLogon    time.Time
+	Workstations []string
+
+	// Risk
+	RiskScore   int
+	RiskReasons []string
 
 	// History related
 	DiscoveredAt time.Time `json:"discovered_at,omitempty"`
