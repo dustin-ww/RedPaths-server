@@ -44,6 +44,7 @@ func (h *HostHandler) CreateHost(c *gin.Context) {
 		c.Request.Context(),
 		host,
 		projectUid,
+		"UserInput",
 	)
 
 	if err != nil {

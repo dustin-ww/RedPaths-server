@@ -28,7 +28,7 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 	}, nil
 }
 
-func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *model.Host) (string, error) {
+func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *model.Host, actor string) (string, error) {
 	var hostUID string
 	log.Println("[ADD HOST]")
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
@@ -52,7 +52,7 @@ func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *mod
 			return nil
 		}
 
-		hostUID, err = s.hostRepo.Create(ctx, tx, host)
+		hostUID, err = s.hostRepo.Create(ctx, tx, host, actor)
 		if err != nil {
 			return fmt.Errorf("failed to create host: %w", err)
 		}

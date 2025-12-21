@@ -6,6 +6,7 @@ import (
 	"RedPaths-server/pkg/adapter/scan"
 	"RedPaths-server/pkg/adapter/serializable"
 	"RedPaths-server/pkg/interfaces"
+	"RedPaths-server/pkg/interfaces/module"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/model/events"
 	"RedPaths-server/pkg/model/redpaths/input"
@@ -44,7 +45,58 @@ func (n *NetworkExplorer) SetServices(services *rpsdk.Services) {
 }
 
 func (n *NetworkExplorer) GetMetadata() *interfaces.ModuleMetadata {
-	return nil
+	return &interfaces.ModuleMetadata{
+		Name:        "NetworkEnumeration",
+		Category:    "enumeration",
+		Description: "Performs network-wide enumeration using Nmap to identify live hosts, open ports and services",
+		Prerequisites: []*module.Prerequisite{
+			{
+				Type:        module.PrereqNetworkAccess,
+				Name:        "Network Reachability",
+				Description: "Target network must be reachable from the scanning interface",
+				Required:    true,
+				Conditions:  "network.reachable = true",
+			},
+			{
+				Type:        module.PrereqKnowledge,
+				Name:        "Target Network Range",
+				Description: "CIDR or IP range to scan",
+				Required:    true,
+				Conditions:  "target.cidr != null",
+			},
+		},
+		Provides: []*module.Capability{
+			{
+				Type:        "network_discovery",
+				Name:        "Host Discovery",
+				Description: "Discovers live hosts in the target network",
+				Confidence:  0.95,
+				Metadata: map[string]interface{}{
+					"method": "icmp,tcp,syn",
+				},
+			},
+			{
+				Type:        "service_enumeration",
+				Name:        "Service & Port Enumeration",
+				Description: "Identifies open ports, protocols and running services",
+				Confidence:  0.9,
+				Metadata: map[string]interface{}{
+					"ports":    "1-65535",
+					"versions": true,
+				},
+			},
+			{
+				Type:        "os_fingerprinting",
+				Name:        "Operating System Detection",
+				Description: "Attempts to identify the operating system of discovered hosts",
+				Confidence:  0.75,
+			},
+		},
+		Risk:       3,
+		Stealth:    2,
+		Complexity: 3,
+	}
+
 }
 
 func (n *NetworkExplorer) ConfigKey() string {
@@ -177,13 +229,13 @@ func (n *NetworkExplorer) buildHost(nmapResult scan.NmapScanResult, ip string, p
 	var hostUID string
 	if domainUID != "" {
 		log.Printf("Using domain UID: %s", domainUID)
-		hostUID, err = n.services.DomainService.AddHost(ctx, domainUID, host)
+		hostUID, err = n.services.DomainService.AddHost(ctx, domainUID, host, n.ConfigKey())
 		if err != nil {
 			return "", fmt.Errorf("failed to add host to domain: %v", err)
 		}
 	} else {
 		log.Printf("Using no domain UID because UID is: %s", domainUID)
-		hostUID, err = n.services.HostService.CreateWithUnknownDomain(ctx, host, params.ProjectUID)
+		hostUID, err = n.services.HostService.CreateWithUnknownDomain(ctx, host, params.ProjectUID, n.ConfigKey())
 		if err != nil {
 			return "", fmt.Errorf("failed to create host: %v", err)
 		}
@@ -284,7 +336,7 @@ func (n *NetworkExplorer) tryToBuildDomain(nmapResult scan.NmapScanResult, ip st
 		Log(n.logger)
 
 	log.Printf("PROJECT UIIDDDDDD: " + params.ProjectUID)
-	addedDomainID, err := n.services.ProjectService.AddDomain(ctx, params.ProjectUID, &builtDomain)
+	addedDomainID, err := n.services.ProjectService.AddDomain(ctx, params.ProjectUID, &builtDomain, n.ConfigKey())
 	if err != nil {
 		log.Printf("failed to add domain to project: %v", err)
 		n.logger.Error("failed to create domain for host",

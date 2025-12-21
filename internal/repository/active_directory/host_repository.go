@@ -6,12 +6,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 )
 
 type HostRepository interface {
-	Create(ctx context.Context, tx *dgo.Txn, host *model.Host) (string, error)
+	Create(ctx context.Context, tx *dgo.Txn, host *model.Host, actor string) (string, error)
 	SetDomainController(ctx context.Context, hostUID string, isDC bool) error
 	AddService(ctx context.Context, tx *dgo.Txn, hostUID, serviceUID string) error
 	AddToDomain(ctx context.Context, tx *dgo.Txn, hostUID string, domainUID string) error
@@ -35,11 +36,15 @@ func NewDgraphHostRepository(db *dgo.Dgraph) *DraphHostRepository {
 	return &DraphHostRepository{DB: db}
 }
 
-func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *model.Host) (string, error) {
+func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *model.Host, actor string) (string, error) {
 
 	hostToCreate := &model.Host{
-		IP:   host.IP,
-		Name: host.Name,
+		IP:           host.IP,
+		Name:         host.Name,
+		DiscoveredAt: time.Now().UTC(),
+		LastSeenAt:   time.Now().UTC(),
+		DiscoveredBy: actor,
+		LastSeenBy:   actor,
 	}
 	return dgraphutil.CreateEntity(ctx, tx, "Host", hostToCreate)
 }

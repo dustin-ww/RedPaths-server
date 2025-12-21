@@ -2,6 +2,7 @@ package attacks
 
 import (
 	"RedPaths-server/pkg/interfaces"
+	"RedPaths-server/pkg/interfaces/module"
 	"RedPaths-server/pkg/model/redpaths/input"
 	"RedPaths-server/pkg/model/rpsdk"
 	plugin "RedPaths-server/pkg/module_exec"
@@ -23,36 +24,36 @@ func (n *PrinterNightmare) SetServices(services *rpsdk.Services) {
 func (n *PrinterNightmare) GetMetadata() *interfaces.ModuleMetadata {
 	return &interfaces.ModuleMetadata{
 		Name:        "PrinterNightmare",
-		Category:    "exploitation",
-		Description: "Exploits CVE-2021-34527 (PrintNightmare) to gain SYSTEM privileges",
-		Prerequisites: []*interfaces.Prerequisite{
+		Category:    "exploit simulation",
+		Description: "Simulates the exploit of CVE-2021-34527 (PrintNightmare) to gain SYSTEM privileges by generating system events",
+		Prerequisites: []*module.Prerequisite{
 			{
-				Type:        interfaces.PrereqNetworkAccess,
+				Type:        module.PrereqNetworkAccess,
 				Name:        "SMB Access",
 				Description: "SMB port (445) must be accessible to a network interface",
 				Required:    true,
 				Conditions:  "service.port = 445",
 			},
 			{
-				Type:        interfaces.PrereqKnowledge,
+				Type:        module.PrereqKnowledge,
 				Name:        "Target IP",
 				Description: "IP address of target Knowledge",
 				Conditions:  "host.os = windows",
 			},
 			{
-				Type:        interfaces.PrereqCredentials,
+				Type:        module.PrereqCredentials,
 				Name:        "Low-Privilege User",
 				Description: "Valid user with low privileges",
 				Conditions:  "user.access >= low",
 				Required:    false,
 			},
 		},
-		Provides: []*interfaces.Capability{
+		Provides: []*module.Capability{
 			{
 				Type:        "privilege_escalation",
 				Name:        "SYSTEM Access",
-				Description: "Eskaliert zu SYSTEM-Rechten auf dem Zielsystem",
-				Confidence:  0.85, // 85% Erfolgswahrscheinlichkeit
+				Description: "Escalates Privileges to SYSTEM on target",
+				Confidence:  0.85,
 				Metadata: map[string]interface{}{
 					"privilege_level": "SYSTEM",
 					"persistence":     false,
@@ -61,13 +62,13 @@ func (n *PrinterNightmare) GetMetadata() *interfaces.ModuleMetadata {
 			{
 				Type:        "code_execution",
 				Name:        "Remote Code Execution",
-				Description: "Erlaubt Ausführung von beliebigem Code als SYSTEM",
+				Description: "Allows the execution of a remote code execution",
 				Confidence:  0.85,
 			},
 		},
-		Risk:       7, // Relativ hohes Risiko (kann Logs erzeugen)
-		Stealth:    4, // Mittlere Stealth (erstellt Dateien im Print-Spool)
-		Complexity: 5, // Mittlere Komplexität
+		Risk:       7,
+		Stealth:    4,
+		Complexity: 5,
 	}
 }
 

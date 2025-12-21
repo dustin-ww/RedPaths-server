@@ -68,7 +68,7 @@ func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectSer
 //	})
 //}
 
-func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *model.Domain) (string, error) {
+func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *model.Domain, actor string) (string, error) {
 	var domainUID string
 
 	log.Printf("[AddDomain] incomingDomain.Name=%s, projectUID=%s", incomingDomain.Name, projectUID)
@@ -96,7 +96,7 @@ func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incom
 			domainUID = existingDomain.UID
 			return nil
 		}
-		return s.createAndLinkDomain(ctx, tx, incomingDomain, projectUID, &domainUID)
+		return s.createAndLinkDomain(ctx, tx, incomingDomain, projectUID, &domainUID, actor)
 	})
 
 	return domainUID, err
@@ -127,10 +127,11 @@ func (s *ProjectService) createAndLinkDomain(
 	domain *model.Domain,
 	projectUID string,
 	domainUIDOut *string,
+	actor string,
 ) error {
 	var err error
 
-	*domainUIDOut, err = s.domainRepo.CreateWithObject(ctx, tx, domain)
+	*domainUIDOut, err = s.domainRepo.CreateWithObject(ctx, tx, domain, actor)
 	if err != nil {
 		return fmt.Errorf("failed to create domain: %w", err)
 	}

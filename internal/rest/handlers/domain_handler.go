@@ -72,6 +72,7 @@ func (h *DomainHandler) AddHost(c *gin.Context) {
 		c.Request.Context(),
 		domainUid,
 		host,
+		"UserInput",
 	)
 
 	if err != nil {

@@ -75,12 +75,12 @@ func (s *HostService) AddService(ctx context.Context, hostUID string, service mo
 	return serviceUID, err
 }
 
-func (s *HostService) CreateWithUnknownDomain(ctx context.Context, host *model.Host, projectUID string) (string, error) {
+func (s *HostService) CreateWithUnknownDomain(ctx context.Context, host *model.Host, projectUID string, actor string) (string, error) {
 	var hostUID string
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
 		var err error
-		hostUID, err = s.hostRepo.Create(ctx, tx, host)
+		hostUID, err = s.hostRepo.Create(ctx, tx, host, actor)
 		log.Printf("Creating Host with uid %s with unknown domain in project with uid %s", hostUID, projectUID)
 		if err != nil {
 			return fmt.Errorf("failed to create host: %w", err)

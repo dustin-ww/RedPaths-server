@@ -15,11 +15,11 @@ import (
 
 type DomainRepository interface {
 	//CRUD
-	Create(ctx context.Context, tx *dgo.Txn, name string) (string, error) // Returns UID
+	Create(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) // Returns UID
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Domain, error)
 	GetByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error)
 	UpdateFields(ctx context.Context, uid string, fields map[string]interface{}) error
-	CreateWithObject(ctx context.Context, tx *dgo.Txn, model *model.Domain) (string, error)
+	CreateWithObject(ctx context.Context, tx *dgo.Txn, model *model.Domain, actor string) (string, error)
 
 	//Relations
 	AddHost(ctx context.Context, tx *dgo.Txn, domainUID, hostUID string) error
@@ -37,13 +37,11 @@ type DgraphDomainRepository struct {
 	DB *dgo.Dgraph
 }
 
-func (r *DgraphDomainRepository) CreateWithObject(ctx context.Context, tx *dgo.Txn, domain *model.Domain) (string, error) {
-	domain.CreatedAt = time.Now().UTC()
+func (r *DgraphDomainRepository) CreateWithObject(ctx context.Context, tx *dgo.Txn, domain *model.Domain, actor string) (string, error) {
 	domain.DiscoveredAt = time.Now().UTC()
-	domain.DiscoveredBy = "User"
-	domain.LastModified = domain.CreatedAt
-	domain.LastSeenAt = domain.CreatedAt
-	domain.LastSeenBy = "User"
+	domain.LastSeenAt = time.Now().UTC()
+	domain.DiscoveredBy = actor
+	domain.LastSeenBy = actor
 	domain.DType = []string{"Domain"}
 	domain.UID = "_:blank-0"
 
@@ -64,7 +62,6 @@ func (r *DgraphDomainRepository) CreateWithObject(ctx context.Context, tx *dgo.T
 	return assigned.Uids["blank-0"], nil
 }
 
-// In DomainRepository:
 func (r *DgraphDomainRepository) GetByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error) {
 	fields := []string{"uid", "name"}
 
@@ -109,6 +106,10 @@ func (r *DgraphDomainRepository) Get(ctx context.Context, tx *dgo.Txn, uid strin
                 uid
                 name
                 belongs_to_project
+				discovered_by
+				discovered_at
+				last_seen_at
+				last_seen_by
                 has_hosts {
                     uid
 				}
@@ -139,6 +140,10 @@ func (r *DgraphDomainRepository) GetByProjectUID(ctx context.Context, tx *dgo.Tx
 		"default_containers",
 		"belongs_to_project { uid }",
 		"dgraph.type",
+		"discovered_by",
+		"discovered_at",
+		"last_seen_at",
+		"last_seen_by",
 	}
 
 	domains, err := dgraphutil.GetEntitiesByRelation[*model.Domain](
@@ -159,7 +164,7 @@ func (r *DgraphDomainRepository) GetByProjectUID(ctx context.Context, tx *dgo.Tx
 	return domains, nil
 }
 
-func (r *DgraphDomainRepository) Create(ctx context.Context, tx *dgo.Txn, name string) (string, error) {
+func (r *DgraphDomainRepository) Create(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) {
 	//TODO implement me
 	panic("implement me")
 }

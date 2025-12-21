@@ -230,6 +230,7 @@ func (h *ProjectHandler) AddDomain(c *gin.Context) {
 		c.Request.Context(),
 		uid,
 		domain,
+		"UserInput",
 	)
 
 	if err != nil {

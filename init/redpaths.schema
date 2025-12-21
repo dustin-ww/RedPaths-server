@@ -31,7 +31,7 @@
 <is_verified>: bool .
 <is_usable>: bool .
 <discovered_at>: datetime .
-<discovered_by>: datetime .
+<discovered_by>: string .
 
 <dns_name>: string @index(exact) .
 <net_bios_name>: string @index(exact) .
