@@ -286,7 +286,6 @@ func (h *ProjectHandler) GetHosts(c *gin.Context) {
 		return
 	}
 
-	log.Println(uid)
 	domains, err := h.projectService.GetHostsByProject(
 		c.Request.Context(),
 		uid,
@@ -294,14 +293,36 @@ func (h *ProjectHandler) GetHosts(c *gin.Context) {
 
 	if err != nil {
 		errReturn := gin.H{
-			"error":   "Failed to retrieve domains",
+			"error":   "Failed to retrieve hosts",
 			"details": err.Error(),
 		}
-		log.Println(err)
 		c.JSON(http.StatusInternalServerError, errReturn)
 	}
 
-	log.Println(domains)
+	c.JSON(http.StatusOK, domains)
+}
+
+func (h *ProjectHandler) GetUsers(c *gin.Context) {
+	uid := c.Param("projectUID")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Project UID is required",
+		})
+		return
+	}
+
+	domains, err := h.projectService.GetUserByProject(
+		c.Request.Context(),
+		uid,
+	)
+
+	if err != nil {
+		errReturn := gin.H{
+			"error":   "Failed to retrieve users",
+			"details": err.Error(),
+		}
+		c.JSON(http.StatusInternalServerError, errReturn)
+	}
 
 	c.JSON(http.StatusOK, domains)
 }

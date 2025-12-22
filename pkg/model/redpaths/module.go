@@ -18,7 +18,7 @@ type Module struct {
 	DependencyVector []string               `gorm:"-" json:"dependency_vector_keys"`
 	Risk             int                    `gorm:"-" json:"risk"`
 	Stealth          int                    `gorm:"-" json:"stealth"`
-	Complexity       int                    `jgorm:"-" son:"complexity"`
+	Complexity       int                    `gorm:"-" son:"complexity"`
 	Prerequisites    []*module.Prerequisite `gorm:"-" json:"prerequisites"`
 	Capabilities     []*module.Capability   `gorm:"-" json:"capabilities"`
 }

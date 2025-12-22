@@ -28,6 +28,7 @@ type ProjectRepository interface {
 	AddDomain(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) error
 	AddTarget(ctx context.Context, tx *dgo.Txn, projectUID, targetUID string) error
 	AddHostWithUnknownDomain(ctx context.Context, tx *dgo.Txn, projectUID, hostUID string) error
+	AddUser(ctx context.Context, tx *dgo.Txn, projectUID, userUID string) error
 }
 
 // DgraphProjectRepository implements ProjectRepository using Dgraph
@@ -224,8 +225,18 @@ func (r *DgraphProjectRepository) AddHostWithUnknownDomain(ctx context.Context, 
 	relationName := "has_host"
 	err := dgraphutil.AddRelation(ctx, tx, projectUID, hostUID, relationName)
 	if err != nil {
-		return fmt.Errorf("error while linking uknown domain host %s to project %s with relation %s", hostUID, projectUID, relationName)
+		return fmt.Errorf("error while linking unknown domain host %s to project %s with relation %s", hostUID, projectUID, relationName)
 	}
 	log.Printf("Created relation %s for host %s and project %s", relationName, hostUID, projectUID)
+	return nil
+}
+
+func (r *DgraphProjectRepository) AddUser(ctx context.Context, tx *dgo.Txn, projectUID, userUID string) error {
+	relationName := "has_user"
+	err := dgraphutil.AddRelation(ctx, tx, projectUID, userUID, relationName)
+	if err != nil {
+		return fmt.Errorf("error while linking unknown domain user %s to project %s with relation %s", userUID, projectUID, relationName)
+	}
+	log.Printf("Created relation %s for user %s and project %s", relationName, userUID, projectUID)
 	return nil
 }

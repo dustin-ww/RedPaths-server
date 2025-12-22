@@ -17,12 +17,13 @@ func RegisterServerHandlers(router *gin.Engine) {
 	}
 }
 
-func RegisterProjectHandlers(router *gin.Engine, projectService *active_directory.ProjectService, logService *service.LogService, domainService *active_directory.DomainService, hostService *active_directory.HostService, serviceService *active_directory.ServiceService) {
+func RegisterProjectHandlers(router *gin.Engine, projectService *active_directory.ProjectService, logService *service.LogService, domainService *active_directory.DomainService, hostService *active_directory.HostService, serviceService *active_directory.ServiceService, userService *active_directory.UserService) {
 	projectHandler := handlers.NewProjectHandler(projectService)
 	logHandler := handlers.NewLogHandler(logService)
 	domainHandler := handlers.NewDomainHandler(projectService, domainService)
 	hostHandler := handlers.NewHostHandler(hostService)
 	serviceHandler := handlers.NewServiceHandler(serviceService)
+	userHandler := handlers.NewUserHandler(userService)
 
 	projectGroup := router.Group("/project")
 	{
@@ -58,6 +59,12 @@ func RegisterProjectHandlers(router *gin.Engine, projectService *active_director
 				{
 					hostItemGroup.GET("/services", serviceHandler.GetServices)
 				}
+			}
+
+			usersGroup := projectItemGroup.Group("/users")
+			{
+				usersGroup.GET("", projectHandler.GetUsers)
+				usersGroup.POST("", userHandler.CreateUser)
 			}
 
 			targetsGroup := projectItemGroup.Group("/targets")

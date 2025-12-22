@@ -104,6 +104,7 @@ type Project {
   modified_at
   has_domain
   has_host
+  has_user
   has_redpaths_modules
   dgraph.type
 }

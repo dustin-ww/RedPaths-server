@@ -23,7 +23,7 @@ type DomainRepository interface {
 
 	//Relations
 	AddHost(ctx context.Context, tx *dgo.Txn, domainUID, hostUID string) error
-	AddUser(ctx context.Context, domainUID, userUID string) error
+	AddUser(ctx context.Context, tx *dgo.Txn, domainUID, userUID string) error
 	AddToProject(ctx context.Context, tx *dgo.Txn, domainUID string, projectUID string) error
 
 	// Checker
@@ -187,9 +187,13 @@ func (r *DgraphDomainRepository) DomainExistsByName(ctx context.Context, tx *dgo
 	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "Domain", "name", name)
 }
 
-func (r *DgraphDomainRepository) AddUser(ctx context.Context, domainUID, userUID string) error {
-	//TODO implement me
-	panic("implement me")
+func (r *DgraphDomainRepository) AddUser(ctx context.Context, tx *dgo.Txn, domainUID, userUID string) error {
+	relationName := "has_user"
+	err := dgraphutil.AddRelation(ctx, tx, domainUID, userUID, relationName)
+	if err != nil {
+		return fmt.Errorf("error while linking user %s to domain %s with relation %s", userUID, domainUID, relationName)
+	}
+	return nil
 }
 
 func NewDgraphDomainRepository(db *dgo.Dgraph) *DgraphDomainRepository {

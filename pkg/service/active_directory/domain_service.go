@@ -29,47 +29,48 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 }
 
 func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *model.Host, actor string) (string, error) {
-	var hostUID string
+
 	log.Println("[ADD HOST]")
+
+	var hostUID string
+
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		// check if host already exists
-		hostExisting, err := s.hostRepo.HostExistsByIP(ctx, tx, domainUID, host.IP)
+
+		// check if host already exists in domain
+		existingHost, err := s.hostRepo.FindByIPInDomain(ctx, tx, domainUID, host.IP)
 		if err != nil {
 			return fmt.Errorf("host existence check failed: %w", err)
 		}
 
-		if hostExisting {
-			log.Printf("[ADD HOST]: Host already exists with ip: %s in domain %s\n", host.IP, domainUID)
-			var rhosts []*model.Host
-			// TODO: build with direct /**/query
-			rhosts, err = s.hostRepo.GetByDomainUID(ctx, tx, domainUID)
-			for _, rhost := range rhosts {
-				if rhost.IP == host.IP {
-					hostUID = rhost.UID
-					return nil
-				}
-			}
+		if existingHost != nil {
+			log.Printf("[ADD HOST]: Host already exists with ip %s in domain %s\n", host.IP, domainUID)
+			hostUID = existingHost.UID
 			return nil
 		}
 
+		// otherwise create new host in domain
 		hostUID, err = s.hostRepo.Create(ctx, tx, host, actor)
 		if err != nil {
 			return fmt.Errorf("failed to create host: %w", err)
 		}
-		log.Printf("Created host with ip %s, name %s receiving uid %s\n", host.IP, host.Name, host.UID)
 
+		log.Printf("Created host with ip %s, name %s receiving uid %s\n", host.IP, host.Name, hostUID)
+
+		// connect domain with host
 		if err := s.domainRepo.AddHost(ctx, tx, domainUID, hostUID); err != nil {
 			return fmt.Errorf("failed to link host to domain: %w", err)
 		}
 
+		// reverse link from host to domain
 		if err := s.hostRepo.AddToDomain(ctx, tx, hostUID, domainUID); err != nil {
 			return fmt.Errorf("failed to reverse link domain to host: %w", err)
 		}
+
 		return nil
 	})
+
 	return hostUID, err
 }
-
 func (s *DomainService) GetDomainHosts(ctx context.Context, domainUID string) ([]*model.Host, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Host, error) {
 		return s.hostRepo.GetByDomainUID(ctx, tx, domainUID)

@@ -6,7 +6,7 @@ import (
 )
 
 type ADUser struct {
-	UID  string
+	UID  string `json:"uid,omitempty"`
 	Name string
 
 	// Identity

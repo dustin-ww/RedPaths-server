@@ -23,6 +23,7 @@ type ProjectService struct {
 	domainRepo  active_directory.DomainRepository
 	hostRepo    active_directory.HostRepository
 	targetRepo  active_directory.TargetRepository
+	userRepo    active_directory.UserRepository
 
 	changeRepo changes.RedPathsChangeRepository
 	db         *dgo.Dgraph
@@ -39,6 +40,7 @@ func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectSer
 		domainRepo:  active_directory.NewDgraphDomainRepository(dgraphCon),
 		hostRepo:    active_directory.NewDgraphHostRepository(dgraphCon),
 		targetRepo:  active_directory.NewDgraphTargetRepository(dgraphCon),
+		userRepo:    active_directory.NewDgraphUserRepository(dgraphCon),
 		changeRepo:  changes.NewPostgresRedPathsChangesRepository(),
 	}, nil
 }
@@ -280,28 +282,13 @@ func (s *ProjectService) DeleteProject(ctx context.Context, projectUID string) e
 
 func (s *ProjectService) GetHostsByProject(ctx context.Context, projectUID string) ([]*model.Host, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Host, error) {
-		var hosts []*model.Host
-		domains, err := s.domainRepo.GetByProjectUID(ctx, tx, projectUID)
-		if err != nil {
-			return nil, err
-		}
+		return s.hostRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
+	})
+}
 
-		// collect hosts with domain
-		for _, domain := range domains {
-			domainHosts, err := s.hostRepo.GetByDomainUID(ctx, tx, domain.UID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get domain hosts in building a list with all hosts in project: %w", err)
-			}
-			hosts = append(hosts, domainHosts...)
-		}
-		// collect hosts without domain
-		withoutDomainHosts, err := s.hostRepo.GetByProjectUID(ctx, tx, projectUID)
+func (s *ProjectService) GetUserByProject(ctx context.Context, projectUID string) ([]*model.ADUser, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.ADUser, error) {
+		return s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 
-		if err != nil {
-			return nil, fmt.Errorf("failed to get hosts by project: %w", err)
-		}
-		hosts = append(hosts, withoutDomainHosts...)
-
-		return hosts, nil
 	})
 }

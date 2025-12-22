@@ -203,7 +203,15 @@ func ExistsByFieldInDomain(
 	return hasEntitiesInPath(domains[0], entityType), nil
 }
 
-func ExistsByFieldInProject(ctx context.Context, tx *dgo.Txn, projectID string, entityType string, fieldName string, fieldValue interface{}) (bool, error) {
+func ExistsByFieldInProject(
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectID string,
+	entityType string,
+	fieldName string,
+	fieldValue interface{},
+) (bool, error) {
+
 	if tx == nil {
 		return false, fmt.Errorf("transaction cannot be nil")
 	}
@@ -213,20 +221,29 @@ func ExistsByFieldInProject(ctx context.Context, tx *dgo.Txn, projectID string, 
 		return false, fmt.Errorf("type handling error: %w", err)
 	}
 
-	var entityPath string
+	var directPath, domainPath string
+
 	switch entityType {
 	case "Domain":
-		entityPath = "has_domain"
+		directPath = "has_domain"
+
 	case "Host":
-		entityPath = "has_domain { has_host }"
+		directPath = "has_host"
+		domainPath = "has_domain { has_host }"
+
 	case "User":
-		entityPath = "has_domain { has_user }"
+		directPath = "has_user"
+		domainPath = "has_domain { has_user }"
+
 	case "Service":
-		entityPath = "has_domain { has_host { has_service } }"
+		domainPath = "has_domain { has_host { has_service } }"
+
 	case "RedPathsModule":
-		entityPath = "has_redpaths_modules"
+		directPath = "has_redpaths_modules"
+
 	case "Target":
-		entityPath = "has_target"
+		directPath = "has_target"
+
 	default:
 		return false, fmt.Errorf("unknown entity type: %s", entityType)
 	}
@@ -234,12 +251,17 @@ func ExistsByFieldInProject(ctx context.Context, tx *dgo.Txn, projectID string, 
 	query := fmt.Sprintf(`
 		query ExistsByField($fieldValue: %s, $projectID: string) {
 			project(func: uid($projectID)) @filter(type(Project)) {
-				%s @filter(type(%s) AND eq(%s, $fieldValue)) {
-					uid
-				}
+
+				%s
+
+				%s
 			}
 		}
-	`, dgType, entityPath, entityType, fieldName)
+	`,
+		dgType,
+		buildFilteredPath("direct", directPath, entityType, fieldName),
+		buildFilteredPath("via_domain", domainPath, entityType, fieldName),
+	)
 
 	vars := map[string]string{
 		"$fieldValue": dgValue,
@@ -251,17 +273,44 @@ func ExistsByFieldInProject(ctx context.Context, tx *dgo.Txn, projectID string, 
 		return false, fmt.Errorf("query error: %w", err)
 	}
 
-	var result map[string][]interface{}
+	var result struct {
+		Project []struct {
+			Direct    []interface{} `json:"direct"`
+			ViaDomain []interface{} `json:"via_domain"`
+		} `json:"project"`
+	}
+
 	if err := json.Unmarshal(res.Json, &result); err != nil {
 		return false, fmt.Errorf("unmarshal error: %w", err)
 	}
 
-	projects, ok := result["project"]
-	if !ok || len(projects) == 0 {
+	if len(result.Project) == 0 {
 		return false, nil
 	}
 
-	return hasEntitiesInPath(projects[0], entityType), nil
+	return len(result.Project[0].Direct) > 0 || len(result.Project[0].ViaDomain) > 0, nil
+}
+
+func buildFilteredPath(alias, path, entityType, fieldName string) string {
+	if path == "" {
+		return ""
+	}
+
+	if !strings.Contains(path, "{") {
+		return fmt.Sprintf(`
+			%s: %s @filter(type(%s) AND eq(%s, $fieldValue)) {
+				uid
+			}
+		`, alias, path, entityType, fieldName)
+	}
+
+	return fmt.Sprintf(`
+		%s: %s {
+			@filter(type(%s) AND eq(%s, $fieldValue)) {
+				uid
+			}
+		}
+	`, alias, path, entityType, fieldName)
 }
 
 // NodeExistsWithField checks if a node exists with the given field-value pair
@@ -800,6 +849,74 @@ func DeleteEntityCascadeByTypeMap(ctx context.Context, tx *dgo.Txn, startUID str
 	fmt.Printf("DEBUG: Mutation successful, assigned: %+v\n", assigned)
 
 	return nil
+}
+
+func GetEntityByFieldInDomain[T any](
+	ctx context.Context,
+	tx *dgo.Txn,
+	domainUID string,
+	entityType string,
+	fieldName string,
+	fieldValue interface{},
+) (*T, error) {
+
+	if tx == nil {
+		return nil, fmt.Errorf("transaction cannot be nil")
+	}
+
+	dgType, dgValue, err := getDgraphTypeAndValue(fieldValue)
+	if err != nil {
+		return nil, fmt.Errorf("type handling error: %w", err)
+	}
+
+	var entityPath string
+	switch entityType {
+	case "Host":
+		entityPath = "has_host"
+	case "User":
+		entityPath = "has_user"
+	case "Service":
+		entityPath = "has_host { has_service }"
+	default:
+		return nil, fmt.Errorf("unsupported entity type for domain: %s", entityType)
+	}
+
+	query := fmt.Sprintf(`
+	query EntityByFieldInDomain($domainUID: string, $fieldValue: %s) {
+		domain(func: uid($domainUID)) @filter(type(Domain)) {
+			%s @filter(type(%s) AND eq(%s, $fieldValue)) {
+				uid
+			}
+		}
+	}`, dgType, entityPath, entityType, fieldName)
+
+	vars := map[string]string{
+		"$domainUID":  domainUID,
+		"$fieldValue": dgValue,
+	}
+
+	resp, err := tx.QueryWithVars(ctx, query, vars)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
+	}
+
+	type domainWrapper struct {
+		Entities []T `json:"has_host"`
+	}
+
+	var result struct {
+		Domain []domainWrapper `json:"domain"`
+	}
+
+	if err := json.Unmarshal(resp.Json, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal error: %w", err)
+	}
+
+	if len(result.Domain) == 0 || len(result.Domain[0].Entities) == 0 {
+		return nil, nil
+	}
+
+	return &result.Domain[0].Entities[0], nil
 }
 
 func GetEntityByFieldInProject[T any](

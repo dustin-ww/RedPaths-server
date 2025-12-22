@@ -51,13 +51,14 @@ func StartServer(port string, postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) {
 	domainService, err := active_directory.NewDomainService(dgraphCon)
 	hostService, err := active_directory.NewHostService(dgraphCon)
 	serviceService, err := active_directory.NewServiceService(dgraphCon)
+	userService, err := active_directory.NewUserService(dgraphCon)
 	moduleExecutor := module_exec.GlobalRegistry
 	redPathsModuleService, err := redpaths.NewModuleService(moduleExecutor, moduleExecutor.RecommendationEngine, postgresCon)
 	logService, err := service.NewLogService(postgresCon)
 	if err != nil {
 		log.Fatalf("Failed to initialize ProjectService: %v", err)
 	}
-	RegisterProjectHandlers(router, projectService, logService, domainService, hostService, serviceService)
+	RegisterProjectHandlers(router, projectService, logService, domainService, hostService, serviceService, userService)
 	RegisterRedPathsModuleHandlers(router, redPathsModuleService)
 	RegisterServerHandlers(router)
 	logger.Info("Starting server")
@@ -67,22 +68,17 @@ func StartServer(port string, postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) {
 }
 
 func initLogger() error {
-	// Datei zum Schreiben öffnen (oder erstellen)
 	file, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return err
 	}
 
-	// MultiWriter erstellen, der sowohl in Datei als auch stdout schreibt
 	multiWriter := io.MultiWriter(os.Stdout, file)
 
-	// Logger mit dem MultiWriter erstellen
 	logger = slog.New(slog.NewJSONHandler(multiWriter, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
-	// Optional: Als Default-Logger setzen
 	slog.SetDefault(logger)
-
 	return nil
 }
