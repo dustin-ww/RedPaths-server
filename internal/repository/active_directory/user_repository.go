@@ -14,11 +14,11 @@ import (
 )
 
 type UserRepository interface {
-	Create(ctx context.Context, tx *dgo.Txn, host *model.ADUser, actor string) (string, error)
+	Create(ctx context.Context, tx *dgo.Txn, incomingUser *model.ADUser, actor string) (*model.ADUser, error)
 	AddToDomain(ctx context.Context, tx *dgo.Txn, userID string, domainUID string) error
 	UserExistsByName(ctx context.Context, tx *dgo.Txn, projectUID string, name string) (bool, error)
 
-	// HOSTS WITH KNOWN/DISCOVERED DOMAIN
+	// Users WITH KNOWN/DISCOVERED DOMAIN
 	GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.ADUser, error)
 	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.ADUser, error)
 
@@ -43,13 +43,16 @@ func (r *DraphUserRepository) UserExistsByName(ctx context.Context, tx *dgo.Txn,
 	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "User", "Name", name)
 }
 
-func (r *DraphUserRepository) Create(ctx context.Context, tx *dgo.Txn, incomingHost *model.ADUser, actor string) (string, error) {
-
-	incomingHost.DiscoveredAt = time.Now().UTC()
-	incomingHost.DiscoveredBy = actor
-	incomingHost.LastSeenAt = time.Now().UTC()
-	incomingHost.LastSeenBy = actor
-	return dgraphutil.CreateEntity(ctx, tx, "User", incomingHost)
+func (r *DraphUserRepository) Create(ctx context.Context, tx *dgo.Txn, incomingUser *model.ADUser, actor string) (*model.ADUser, error) {
+	incomingUser.DiscoveredAt = time.Now().UTC()
+	incomingUser.DiscoveredBy = actor
+	incomingUser.LastSeenAt = time.Now().UTC()
+	incomingUser.LastSeenBy = actor
+	createdUser, err := dgraphutil.CreateEntity(ctx, tx, "User", incomingUser)
+	if err != nil {
+		return nil, err
+	}
+	return createdUser, nil
 }
 
 func (r *DraphUserRepository) GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.ADUser, error) {

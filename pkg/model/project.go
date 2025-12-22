@@ -11,8 +11,8 @@ type Project struct {
 	Name                      string         `json:"name,omitempty"`
 	Tags                      []string       `json:"tags,omitempty"`
 	Description               string         `json:"description,omitempty"`
-	CreatedAt                 time.Time      `json:"createdAt,omitempty"`
-	UpdatedAt                 time.Time      `json:"updatedAt,omitempty"`
+	CreatedAt                 time.Time      `json:"created_at,omitempty"`
+	UpdatedAt                 time.Time      `json:"updated_at,omitempty"`
 	HasTarget                 []Target       `json:"has_target,omitempty"`
 	HasDomain                 []Domain       `json:"has_domain,omitempty"`
 	HashHostWithUnknownDomain []utils.UIDRef `json:"has_unknown_domain_host,omitempty"`

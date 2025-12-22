@@ -17,17 +17,17 @@ type Host struct {
 	DType              []string        `json:"dgraph.type,omitempty"`
 	InternalCreatedAt  time.Time       `json:"internal_created_at,omitempty"`
 	// AD related
-	DistinguishedName      string    `json:"distinguishedName"`
-	ObjectGUID             string    `json:"objectGUID"`
-	ObjectSid              string    `json:"objectSid"`
-	SAMAccountName         string    `json:"sAMAccountName"`
-	DNSHostName            string    `json:"dNSHostName"`
-	OperatingSystem        string    `json:"operatingSystem"`
-	OperatingSystemVersion string    `json:"operatingSystemVersion"`
-	LastLogonTimestamp     time.Time `json:"lastLogonTimestamp"`
-	WhenCreated            time.Time `json:"whenCreated"`
-	WhenChanged            time.Time `json:"whenChanged"`
-	UserAccountControl     int       `json:"userAccountControl"`
+	DistinguishedName      string    `json:"distinguished_name"`
+	ObjectGUID             string    `json:"object_guid"`
+	ObjectSid              string    `json:"object_sid"`
+	SAMAccountName         string    `json:"sam_account_name"`
+	DNSHostName            string    `json:"dns_host_name"`
+	OperatingSystem        string    `json:"operating_system"`
+	OperatingSystemVersion string    `json:"operating_system_version"`
+	LastLogonTimestamp     time.Time `json:"last_logon_timestamp"`
+	WhenCreated            time.Time `json:"when_created"`
+	WhenChanged            time.Time `json:"when_changed"`
+	UserAccountControl     int       `json:"user_account_control"`
 
 	// History related
 	DiscoveredAt time.Time `json:"discovered_at,omitempty"`

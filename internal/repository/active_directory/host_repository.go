@@ -137,7 +137,7 @@ func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *mod
 		DiscoveredBy: actor,
 		LastSeenBy:   actor,
 	}
-	return dgraphutil.CreateEntity(ctx, tx, "Host", hostToCreate)
+	return dgraphutil.OldCreateEntity(ctx, tx, "Host", hostToCreate)
 }
 
 // WITH DOMAIN

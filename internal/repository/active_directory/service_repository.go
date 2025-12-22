@@ -34,7 +34,7 @@ func NewDgraphServiceRepository(db *dgo.Dgraph) *DgraphServiceRepository {
 }
 
 func (r *DgraphServiceRepository) CreateWithObject(ctx context.Context, tx *dgo.Txn, service model.Service) (string, error) {
-	return dgraphutil.CreateEntity(ctx, tx, "Service", service)
+	return dgraphutil.OldCreateEntity(ctx, tx, "Service", service)
 }
 
 func (r *DraphHostRepository) ServiceExistsByPortOnHost(ctx context.Context, tx *dgo.Txn, projectUID, ip string) (bool, error) {

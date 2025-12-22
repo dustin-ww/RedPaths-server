@@ -13,20 +13,20 @@ type Service struct {
 
 	// AD related
 	SPNs                    []string `json:"spns,omitempty"`
-	AccountName             string   `json:"accountName,omitempty"`
+	AccountName             string   `json:"account_name,omitempty"`
 	SID                     string   `json:"sid,omitempty"`
-	PasswordLastSet         int64    `json:"passwordLastSet,omitempty"`
-	ConstrainedDelegation   []string `json:"constrainedDelegation,omitempty"`
-	UnconstrainedDelegation bool     `json:"unconstrainedDelegation,omitempty"`
-	DNSHostName             string   `json:"dnsHostName,omitempty"`
-	WhenCreated             string   `json:"whenCreated,omitempty"`
-	WhenChanged             string   `json:"whenChanged,omitempty"`
-	LastLogon               int64    `json:"lastLogon,omitempty"`
-	OperatingSystem         string   `json:"operatingSystem,omitempty"`
+	PasswordLastSet         int64    `json:"password_last_set,omitempty"`
+	ConstrainedDelegation   []string `json:"constrained_delegation,omitempty"`
+	UnconstrainedDelegation bool     `json:"unconstrained_delegation,omitempty"`
+	DNSHostName             string   `json:"dns_host_name,omitempty"`
+	WhenCreated             string   `json:"when_created,omitempty"`
+	WhenChanged             string   `json:"when_changed,omitempty"`
+	LastLogon               int64    `json:"last_logon,omitempty"`
+	OperatingSystem         string   `json:"operating_system,omitempty"`
 	Description             string   `json:"description,omitempty"`
-	IsLegacy                bool     `json:"isLegacy,omitempty"`
-	TrustedForDelegation    bool     `json:"trustedForDelegation,omitempty"`
-	AccountCanBeDelegated   bool     `json:"accountCanBeDelegated,omitempty"`
+	IsLegacy                bool     `json:"is_legacy,omitempty"`
+	TrustedForDelegation    bool     `json:"trusted_for_delegation,omitempty"`
+	AccountCanBeDelegated   bool     `json:"account_can_be_delegated,omitempty"`
 
 	// Reverse
 	DeployedOnHost *utils.UIDRef `json:"deployed_on_host,omitempty"`

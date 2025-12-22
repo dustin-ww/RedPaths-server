@@ -106,8 +106,8 @@ func AddRelation(ctx context.Context, tx *dgo.Txn, sourceUID, targetUID, relatio
 	return executeMutation(ctx, tx, update)
 }
 
-// CreateEntity creates a new entity with a unique blank node ID and returns the assigned UID
-func CreateEntity(ctx context.Context, tx *dgo.Txn, dtype string, entity interface{}) (string, error) {
+// OldCreateEntity creates a new entity with a unique blank node ID and returns the assigned UID
+func OldCreateEntity(ctx context.Context, tx *dgo.Txn, dtype string, entity interface{}) (string, error) {
 	if tx == nil {
 		return "", fmt.Errorf("transaction cannot be nil")
 	}
@@ -139,6 +139,48 @@ func CreateEntity(ctx context.Context, tx *dgo.Txn, dtype string, entity interfa
 	}
 
 	return assigned.Uids[blankID], nil
+}
+
+func CreateEntity[T any](ctx context.Context, tx *dgo.Txn, dtype string, entity T) (T, error) {
+	var zero T
+
+	if tx == nil {
+		return zero, fmt.Errorf("transaction cannot be nil")
+	}
+
+	jsonBytes, err := json.Marshal(entity)
+	if err != nil {
+		return zero, fmt.Errorf("marshal entity error: %w", err)
+	}
+
+	var entityMap map[string]interface{}
+	if err := json.Unmarshal(jsonBytes, &entityMap); err != nil {
+		return zero, fmt.Errorf("unmarshal to map error: %w", err)
+	}
+
+	blankID := uuid.New().String()
+	entityMap["uid"] = fmt.Sprintf("_:%s", blankID)
+	entityMap["dgraph.type"] = dtype
+
+	jsonData, err := json.Marshal(entityMap)
+	if err != nil {
+		return zero, fmt.Errorf("marshal error: %w", err)
+	}
+
+	mu := &api.Mutation{SetJson: jsonData}
+	assigned, err := tx.Mutate(ctx, mu)
+	if err != nil {
+		return zero, fmt.Errorf("mutation error: %w", err)
+	}
+
+	if assignedUID, ok := assigned.Uids[blankID]; ok {
+		if reflect.ValueOf(entity).Kind() == reflect.Ptr {
+			reflect.ValueOf(entity).Elem().FieldByName("UID").SetString(assignedUID)
+		}
+		return entity, nil
+	}
+
+	return zero, fmt.Errorf("no UID assigned from mutation")
 }
 
 func ExistsByFieldInDomain(

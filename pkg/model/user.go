@@ -7,40 +7,40 @@ import (
 
 type ADUser struct {
 	UID  string `json:"uid,omitempty"`
-	Name string
+	Name string `json:"name,omitempty"`
 
 	// Identity
-	SAMAccountName string
-	UPN            string
-	SID            string
-	AccountType    string
+	SAMAccountName string `json:"sam_account_name,omitempty"`
+	UPN            string `json:"upn,omitempty"`
+	SID            string `json:"sid,omitempty"`
+	AccountType    string `json:"account_type,omitempty"`
 
 	// Credentials
-	Password       string
-	NTLMHash       string
-	CredentialType string
+	Password       string `json:"password,omitempty"`
+	NTLMHash       string `json:"ntlm_hash,omitempty"`
+	CredentialType string `json:"credential_type,omitempty"`
 
 	// Privileges
-	IsAdmin       bool
-	IsDomainAdmin bool
-	MemberOf      []*utils.UIDRef
+	IsAdmin       bool            `json:"is_admin,omitempty"`
+	IsDomainAdmin bool            `json:"is_domain_admin,omitempty"`
+	MemberOf      []*utils.UIDRef `json:"member_of,omitempty"`
 
 	// Kerberos
-	SPNs           []string
-	Kerberoastable bool
-	ASREPRoastable bool
+	SPNs           []string `json:"spns,omitempty"`
+	Kerberoastable bool     `json:"kerberoastable,omitempty"`
+	ASREPRoastable bool     `json:"asrep_roastable,omitempty"`
 
 	// Delegation
-	TrustedForDelegation    bool
-	UnconstrainedDelegation bool
+	TrustedForDelegation    bool `json:"trusted_for_delegation,omitempty"`
+	UnconstrainedDelegation bool `json:"unconstrained_delegation,omitempty"`
 
 	// Usage
-	LastLogon    time.Time
-	Workstations []string
+	LastLogon    time.Time `json:"last_logon,omitempty"`
+	Workstations []string  `json:"workstations,omitempty"`
 
 	// Risk
-	RiskScore   int
-	RiskReasons []string
+	RiskScore   int      `json:"risk_score,omitempty"`
+	RiskReasons []string `json:"risk_reason,omitempty"`
 
 	// History related
 	DiscoveredAt time.Time `json:"discovered_at,omitempty"`
