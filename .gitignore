@@ -46,3 +46,5 @@ deployments/devbox.lock
 .devbox
 
 *.xml
+
+modulelib/

@@ -137,6 +137,7 @@ type Target {
 
 type Domain {
   name
+  description
   dns_name
   net_bios_name
   domain_guid
@@ -178,8 +179,10 @@ type Trust {
 
 type Host {
   ip
+  name
   is_domain_controller
   belongs_to_domain
+  description
   has_service
   dgraph.type
   discovered_at
@@ -190,6 +193,9 @@ type Host {
 
 type Service {
   name
+  sid
+
+  description
   port
   deployed_on_host
   dgraph.type
@@ -201,9 +207,10 @@ type Service {
 
 type User {
   name
+  sid
+  description
   sam_account_name
   user_principal_name
-  user_sid
   ntlm_hash
   password
   is_admin
@@ -226,8 +233,9 @@ type User {
 }
 
 type Group {
-  group_name
-  group_sid
+  name
+  description
+  sid
   group_scope
   group_type
   belongs_to_domain

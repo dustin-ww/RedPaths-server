@@ -7,15 +7,20 @@ import (
 )
 
 type Host struct {
+	// PRIMARY Identifier
+	IP string `json:"ip"`
+
 	// Internal
-	UID                string          `json:"uid,omitempty"`
-	IP                 string          `json:"ip"`
+	UID string `json:"uid,omitempty"`
+
+	// Available Values
 	Name               string          `json:"name,omitempty"`
 	IsDomainController bool            `json:"is_domain_controller,omitempty"`
 	BelongsToDomain    []*utils.UIDRef `json:"belongs_to_domain,omitempty"`
 	HasService         []*utils.UIDRef `json:"has_service,omitempty"`
 	DType              []string        `json:"dgraph.type,omitempty"`
 	InternalCreatedAt  time.Time       `json:"internal_created_at,omitempty"`
+
 	// AD related
 	DistinguishedName      string    `json:"distinguished_name"`
 	ObjectGUID             string    `json:"object_guid"`

@@ -39,8 +39,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	}
 
 	projectUid := c.Param("projectUID")
-
-	projectUID, err := h.userService.Create(
+	createdUser, err := h.userService.Create(
 		c.Request.Context(),
 		user,
 		projectUid,
@@ -56,7 +55,8 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"uid":     projectUID,
-		"message": "New user has been created",
+		"status":       "success",
+		"message":      "New user has been created",
+		"created_user": createdUser,
 	})
 }

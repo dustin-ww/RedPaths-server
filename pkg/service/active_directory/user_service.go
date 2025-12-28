@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 )
@@ -29,27 +28,22 @@ func NewUserService(dgraphCon *dgo.Dgraph) (*UserService, error) {
 	}, nil
 }
 
-func (s *UserService) Create(ctx context.Context, user *model.ADUser, projectUID string, actor string) (string, error) {
-	var hostUID string
+func (s *UserService) Create(ctx context.Context, user *model.ADUser, projectUID string, actor string) (*model.ADUser, error) {
+	var createdUser *model.ADUser
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
-		user.DiscoveredAt = time.Now().UTC()
-		user.DiscoveredBy = actor
-		user.LastSeenAt = time.Now().UTC()
-		user.LastSeenBy = actor
-
 		var err error
-		hostUID, err = s.userRepo.Create(ctx, tx, user, actor)
-		log.Printf("Creating User with new uid %s and unknown domain in project with uid %s", hostUID, projectUID)
+		createdUser, err = s.userRepo.Create(ctx, tx, user, actor)
+		log.Printf("Creating User with new uid %s and unknown domain in project with uid %s", createdUser.UID, projectUID)
 		if err != nil {
 			return fmt.Errorf("failed to create host: %w", err)
 		}
 
-		if err := s.projectRepo.AddUser(ctx, tx, projectUID, hostUID); err != nil {
+		if err := s.projectRepo.AddUser(ctx, tx, projectUID, createdUser.UID); err != nil {
 			return fmt.Errorf("failed to reverse link unknown domain user to project: %w", err)
 		}
 
 		return nil
 	})
-	return hostUID, err
+	return createdUser, err
 }

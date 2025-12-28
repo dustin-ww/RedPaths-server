@@ -21,7 +21,7 @@ func NewHostHandler(hostService *active_directory.HostService) *HostHandler {
 // CreateHost Function to create a standalone host without domain
 func (h *HostHandler) CreateHost(c *gin.Context) {
 	type CreateHostRequest struct {
-		Ip string `json:"ipAddress" binding:"required"`
+		Ip string `json:"ip_address" binding:"required"`
 	}
 
 	var request CreateHostRequest
