@@ -2,6 +2,8 @@ created_at: datetime @index(hour) .
 modified_at: datetime @index(hour) .
 discovered_at: datetime @index(hour) .
 discovered_by: string .
+validated_at: datetime @index(hour) .
+validated_by: string .
 last_seen_at: datetime @index(hour) .
 last_seen_by: string .
 
@@ -32,6 +34,8 @@ type ActiveDirectory {
   active_directory.has_domain
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -75,10 +79,10 @@ type Domain {
   domain.security_policy
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
   dgraph.type
 }
 
@@ -93,6 +97,9 @@ type Trust {
   trust.is_transitive
   trust.trusted_domain
   created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -108,6 +115,10 @@ type SecurityPolicy {
   security_policy.pwd_history_length
   security_policy.lockout_threshold
   security_policy.lockout_duration
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -135,6 +146,8 @@ type DirectoryNode {
   directory_node.has_gpo_link
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -180,10 +193,10 @@ type User {
   group.member_of
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
   dgraph.type
 }
 
@@ -221,10 +234,10 @@ type Group {
   group.member_of
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
   dgraph.type
 }
 
@@ -245,6 +258,8 @@ type ServiceAccount {
   group.member_of
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -271,6 +286,8 @@ type Computer {
   group.member_of
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -290,10 +307,10 @@ type Host {
   host.has_acl
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
   dgraph.type
 }
 
@@ -307,6 +324,8 @@ type Service {
   service.description
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -318,6 +337,10 @@ spn.service_type: string @index(exact) .
 type SPN {
   spn.spn
   spn.service_type
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -333,10 +356,12 @@ type Credential {
   credential.is_usable
   credential.lifetime
   credential.usable_on
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
   dgraph.type
 }
 
@@ -352,6 +377,10 @@ type KerberosTicket {
   kerberos_ticket.ticket_type
   kerberos_ticket.spn
   kerberos_ticket.delegation_type
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -365,6 +394,10 @@ type NTLMHash {
   credential.lifetime
   credential.usable_on
   ntlm_hash.hash
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -376,6 +409,10 @@ delegation_config.allowed_to_delegate_to: [string] .
 type DelegationConfig {
   delegation_config.delegation_type
   delegation_config.allowed_to_delegate_to
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -393,10 +430,12 @@ type Session {
   session.login_time
   session.on_host
   session.exposes
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
   dgraph.type
 }
 
@@ -421,6 +460,10 @@ type ACL {
   acl.contains
   created_at
   modified_at
+  validated_at
+  validated_by
+  discovered_at
+  discovered_by
   dgraph.type
 }
 
@@ -440,6 +483,10 @@ type ACE {
   ace.derives
   created_at
   modified_at
+  validated_at
+  validated_by
+  discovered_at
+  discovered_by
   dgraph.type
 }
 
@@ -470,6 +517,8 @@ type GPO {
   gpo.has_acl
   created_at
   modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -481,6 +530,10 @@ gpo_setting.value: string .
 type GPOSetting {
   gpo_setting.setting_type
   gpo_setting.value
+  created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
   discovered_by
   dgraph.type
@@ -498,6 +551,10 @@ type GPOLink {
   gpo_link.links_to
   created_at
   modified_at
+  validated_at
+  validated_by
+  discovered_at
+  discovered_by
   dgraph.type
 }
 
@@ -579,6 +636,10 @@ type Target {
   target.note
   target.is_verified
   created_at
+  modified_at
+  validated_at
+  validated_by
   discovered_at
+  discovered_by
   dgraph.type
 }
