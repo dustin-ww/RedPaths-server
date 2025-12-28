@@ -158,6 +158,12 @@ func (s *ModuleService) CreateVectorRun(ctx context.Context, vectorMetadata *red
 	})
 }
 
+func (s *ModuleService) GetModuleByKeyIfExists(ctx context.Context, moduleKey string) (*redpaths.Module, error) {
+	return db.ExecutePostgresRead(ctx, s.db, func(db *gorm.DB) (*redpaths.Module, error) {
+		return s.redPathsModuleRepo.Get(ctx, db, moduleKey)
+	})
+}
+
 func (s *ModuleService) GetAttackVectorByKey(ctx context.Context, moduleKey string) ([]*redpaths.Module, error) {
 	return db.ExecutePostgresRead(ctx, s.db, func(db *gorm.DB) ([]*redpaths.Module, error) {
 		var attackVector []*redpaths.Module

@@ -59,7 +59,7 @@ func StartServer(port string, postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) {
 		log.Fatalf("Failed to initialize ProjectService: %v", err)
 	}
 	RegisterProjectHandlers(router, projectService, logService, domainService, hostService, serviceService, userService)
-	RegisterRedPathsModuleHandlers(router, redPathsModuleService)
+	RegisterRedPathsModuleHandlers(router, redPathsModuleService, projectService)
 	RegisterServerHandlers(router)
 	logger.Info("Starting server")
 

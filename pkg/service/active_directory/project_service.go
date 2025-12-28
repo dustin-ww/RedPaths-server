@@ -2,12 +2,14 @@ package active_directory
 
 import (
 	"RedPaths-server/internal/db"
+	rperror "RedPaths-server/internal/error"
 	"RedPaths-server/internal/repository/active_directory"
 	"RedPaths-server/internal/repository/changes"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 
@@ -45,38 +47,13 @@ func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectSer
 	}, nil
 }
 
-// AddDomainWithHosts adds a domain with associated hosts to a project.
-//func (s *ProjectService) AddDomainWithHosts(ctx context.Context, projectUID, domainName string, hosts []string) error {
-//	return db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-//		domainUID, err := s.domainRepo.Create(ctx, domainName)
-//		if err != nil {
-//			return fmt.Errorf("failed to create domain: %w", err)
-//		}
-//
-//		if err := s.projectRepo.AddDomain(ctx, tx, projectUID, domainUID); err != nil {
-//			return fmt.Errorf("failed to link domain: %w", err)
-//		}
-//
-//		for _, ip := range hosts {
-//			hostUID, err := s.hostRepo.Create(ctx, ip)
-//			if err != nil {
-//				return fmt.Errorf("failed to create host %s: %w", ip, err)
-//			}
-//			if err := s.domainRepo.AddHost(ctx, domainUID, hostUID); err != nil {
-//				return fmt.Errorf("failed to link host: %w", err)
-//			}
-//		}
-//		return nil
-//	})
-//}
-
 func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *model.Domain, actor string) (string, error) {
 	var domainUID string
 
 	log.Printf("[AddDomain] incomingDomain.Name=%s, projectUID=%s", incomingDomain.Name, projectUID)
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 		// check if incomingDomain already exists
-		existingDomain, err := s.getDomainIfExists(ctx, tx, projectUID, incomingDomain.Name)
+		existingDomain, err := s.getDomainByNameIfExists(ctx, tx, projectUID, incomingDomain.Name)
 		if err != nil {
 			return fmt.Errorf("incomingDomain existence check failed: %w", err)
 		}
@@ -104,23 +81,29 @@ func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incom
 	return domainUID, err
 }
 
-func (s *ProjectService) getDomainIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*model.Domain, error) {
-	isExisting, err := s.domainRepo.DomainExistsByName(ctx, tx, projectUID, domainName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if domain exists: %w", err)
-	}
-
-	if !isExisting {
-		return nil, nil
-	}
-
-	log.Println("domain with name " + domainName + " already exists. Skipping!")
+func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*model.Domain, error) {
 	domain, err := s.domainRepo.GetByName(ctx, tx, projectUID, domainName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get domain with name %s: %w", domainName, err)
+		if errors.Is(err, rperror.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get domain by name %s: %w", domainName, err)
 	}
-
+	log.Printf("domain with name %s already exists. Skipping!", domainName)
 	return domain, nil
+}
+
+func (s *ProjectService) GetByUID(ctx context.Context, projectUID, domainUID string) (*model.Domain, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.Domain, error) {
+		domain, err := s.domainRepo.GetByUID(ctx, tx, projectUID, domainUID)
+		if err != nil {
+			if errors.Is(err, rperror.ErrNotFound) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("failed to get domain by uid %s: %w", domainUID, err)
+		}
+		return domain, nil
+	})
 }
 
 func (s *ProjectService) createAndLinkDomain(

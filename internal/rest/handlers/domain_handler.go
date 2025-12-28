@@ -1,13 +1,12 @@
 package handlers
 
 import (
+	restcontext "RedPaths-server/internal/rest/context"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/service/active_directory"
-	"fmt"
+	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
-
-	"github.com/gin-gonic/gin"
 )
 
 type DomainHandler struct {
@@ -22,6 +21,7 @@ func NewDomainHandler(projectService *active_directory.ProjectService, domainSer
 	}
 }
 
+/*
 func (h *DomainHandler) GetHosts(c *gin.Context) {
 	uid := c.Param("domainUID")
 	if uid == "" {
@@ -45,6 +45,24 @@ func (h *DomainHandler) GetHosts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errReturn)
 	}
 
+	c.JSON(http.StatusOK, hosts)
+}*/
+
+func (h *DomainHandler) GetHosts(c *gin.Context) {
+	domain := c.MustGet("domain").(*model.Domain)
+
+	hosts, err := h.domainService.GetDomainHosts(
+		c.Request.Context(),
+		domain.UID,
+	)
+
+	project := restcontext.Project(c)
+	domain := restcontext.Domain(c)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, hosts)
 }
 
@@ -80,12 +98,11 @@ func (h *DomainHandler) AddHost(c *gin.Context) {
 			"error":   "Failed to add host",
 			"details": err.Error(),
 		})
-		fmt.Println(err)
+		log.Printf("Sending client 500 error response for adding host to domain %s with message %s", domainUid, err.Error())
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"status": "host successfully added",
-		"ip":     request.Ip,
+	c.JSON(http.StatusCreated, gin.H{
+		"message":      "New user has been created",
+		"created_host": nil,
 	})
 }

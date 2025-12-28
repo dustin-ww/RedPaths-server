@@ -1,6 +1,7 @@
 package redpaths
 
 import (
+	rperrors "RedPaths-server/internal/error"
 	"RedPaths-server/pkg/model/redpaths"
 	"context"
 	"errors"
@@ -295,7 +296,7 @@ func (r *PostgresRedPathsModuleRepository) Get(ctx context.Context, tx *gorm.DB,
 
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, fmt.Errorf("module not found: %s", moduleKey)
+				return nil, rperrors.ErrNotFound
 			}
 			return nil, fmt.Errorf("database error: %w", err)
 		}

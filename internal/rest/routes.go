@@ -2,6 +2,7 @@ package rest
 
 import (
 	"RedPaths-server/internal/rest/handlers"
+	"RedPaths-server/internal/rest/middleware"
 	"RedPaths-server/pkg/service"
 	"RedPaths-server/pkg/service/active_directory"
 	"RedPaths-server/pkg/service/redpaths"
@@ -17,7 +18,15 @@ func RegisterServerHandlers(router *gin.Engine) {
 	}
 }
 
-func RegisterProjectHandlers(router *gin.Engine, projectService *active_directory.ProjectService, logService *service.LogService, domainService *active_directory.DomainService, hostService *active_directory.HostService, serviceService *active_directory.ServiceService, userService *active_directory.UserService) {
+func RegisterProjectHandlers(
+	router *gin.Engine,
+	projectService *active_directory.ProjectService,
+	logService *service.LogService,
+	domainService *active_directory.DomainService,
+	hostService *active_directory.HostService,
+	serviceService *active_directory.ServiceService,
+	userService *active_directory.UserService) {
+
 	projectHandler := handlers.NewProjectHandler(projectService)
 	logHandler := handlers.NewLogHandler(logService)
 	domainHandler := handlers.NewDomainHandler(projectService, domainService)
@@ -25,93 +34,97 @@ func RegisterProjectHandlers(router *gin.Engine, projectService *active_director
 	serviceHandler := handlers.NewServiceHandler(serviceService)
 	userHandler := handlers.NewUserHandler(userService)
 
-	projectGroup := router.Group("/project")
+	projects := router.Group("/projects")
 	{
-		projectGroup.GET("/overviews", projectHandler.GetProjectOverviews)
-		projectGroup.DELETE("/:projectUID", projectHandler.Delete)
-		projectGroup.GET("", projectHandler.GetProjectOverviews)
-		projectGroup.POST("", projectHandler.CreateProject)
+		projects.GET("/overviews", projectHandler.GetProjectOverviews)
+		projects.DELETE("/:projectUID", projectHandler.Delete)
+		projects.GET("", projectHandler.GetProjectOverviews)
+		projects.POST("", projectHandler.CreateProject)
 
-		projectItemGroup := projectGroup.Group("/:projectUID")
+		project := projects.Group("/:projectUID")
+		project.Use(middleware.ProjectContext(projectService))
 		{
-			projectItemGroup.GET("", projectHandler.Get)
-			projectItemGroup.PATCH("", projectHandler.UpdateProject)
+			project.GET("", projectHandler.Get)
+			project.PATCH("", projectHandler.UpdateProject)
 
-			domainsGroup := projectItemGroup.Group("/domains")
+			domains := project.Group("/domains")
 			{
-				domainsGroup.GET("", projectHandler.GetDomains)
-				domainsGroup.POST("", projectHandler.AddDomain)
+				domains.GET("", projectHandler.GetDomains)
+				domains.POST("", projectHandler.AddDomain)
 
-				domainItemGroup := domainsGroup.Group("/:domainUID")
+				domain := domains.Group("/:domainUID")
+				domain.Use(middleware.DomainContext(domainService))
 				{
-					domainItemGroup.GET("/hosts", domainHandler.GetHosts)
-					domainItemGroup.POST("/hosts", domainHandler.AddHost)
+					domain.GET("/hosts", domainHandler.GetHosts)
+					domain.POST("/hosts", domainHandler.AddHost)
 				}
 
 			}
 
-			hostsGroup := projectItemGroup.Group("/hosts")
+			hosts := project.Group("/hosts")
 			{
-				hostsGroup.POST("", hostHandler.CreateHost)
-				hostsGroup.GET("", projectHandler.GetHosts)
+				hosts.POST("", hostHandler.CreateHost)
+				hosts.GET("", projectHandler.GetHosts)
 
-				hostItemGroup := hostsGroup.Group("/:hostUID")
+				host := hosts.Group("/:hostUID")
 				{
-					hostItemGroup.GET("/services", serviceHandler.GetServices)
+					host.GET("/services", serviceHandler.GetServices)
 				}
 			}
 
-			usersGroup := projectItemGroup.Group("/users")
+			users := project.Group("/users")
 			{
-				usersGroup.GET("", projectHandler.GetUsers)
-				usersGroup.POST("", userHandler.CreateUser)
+				users.GET("", projectHandler.GetUsers)
+				users.POST("", userHandler.CreateUser)
 			}
 
-			targetsGroup := projectItemGroup.Group("/targets")
+			targets := project.Group("/targets")
 			{
-				targetsGroup.GET("", projectHandler.GetTargets)
-				targetsGroup.POST("", projectHandler.CreateTarget)
+				targets.GET("", projectHandler.GetTargets)
+				targets.POST("", projectHandler.CreateTarget)
 			}
 
-			logsGroup := projectItemGroup.Group("/logs")
+			logs := project.Group("/logs")
 			{
-				logsGroup.GET("", logHandler.GetLogs)
-				logsGroup.POST("/query", logHandler.GetLogsWithOptions)
-				logsGroup.GET("/types", logHandler.GetLogTypes)
-				logsGroup.GET("/mkeys", logHandler.GetModuleKeySet)
+				logs.GET("", logHandler.GetLogs)
+				logs.POST("/query", logHandler.GetLogsWithOptions)
+				logs.GET("/types", logHandler.GetLogTypes)
+				logs.GET("/mkeys", logHandler.GetModuleKeySet)
 			}
 		}
 	}
 }
 
-func RegisterRedPathsModuleHandlers(router *gin.Engine, redPathsModuleService *redpaths.ModuleService) {
+func RegisterRedPathsModuleHandlers(router *gin.Engine, redPathsModuleService *redpaths.ModuleService, projectService *active_directory.ProjectService) {
 	moduleHandler := handlers.NewRedPathsModuleHandler(redPathsModuleService)
 
-	redPathsGroup := router.Group("/redpaths")
+	redPaths := router.Group("/redpaths")
 	{
 
-		moduleGroup := redPathsGroup.Group("/modules")
+		modules := redPaths.Group("/modules")
 		{
-			moduleGroup.GET("", moduleHandler.GetModules)
-			moduleGroup.GET("/graph", moduleHandler.GetModuleInheritanceGraph)
+			modules.GET("", moduleHandler.GetModules)
+			modules.GET("/graph", moduleHandler.GetModuleInheritanceGraph)
 
-			moduleItemGroup := moduleGroup.Group("/:moduleKey")
+			module := modules.Group("/:moduleKey")
+			module.Use(middleware.ModuleContext(redPathsModuleService))
 			{
-				moduleItemGroup.GET("/run", moduleHandler.RunModule)
-				moduleItemGroup.GET("/options", moduleHandler.GetModuleOptions)
+				module.GET("/run", moduleHandler.RunModule)
+				module.GET("/options", moduleHandler.GetModuleOptions)
 
-				moduleItemVectorGroup := moduleItemGroup.Group("/vector")
+				moduleVector := module.Group("/vector")
 				{
-					moduleItemVectorGroup.POST("/run", moduleHandler.RunAttackVector)
-					moduleItemVectorGroup.GET("/options", moduleHandler.GetAttackVectorOptions)
+					moduleVector.POST("/run", moduleHandler.RunAttackVector)
+					moduleVector.GET("/options", moduleHandler.GetAttackVectorOptions)
 				}
 			}
 
 		}
-		projectItemGroup := redPathsGroup.Group("/:projectUID")
+		project := redPaths.Group("/:projectUID")
+		project.Use(middleware.ProjectContext(projectService))
 		{
-			projectItemGroup.GET("/vruns", moduleHandler.GetVectorRuns)
-			projectItemGroup.GET("/mruns", moduleHandler.GetModuleRuns)
+			project.GET("/vruns", moduleHandler.GetVectorRuns)
+			project.GET("/mruns", moduleHandler.GetModuleRuns)
 		}
 	}
 }

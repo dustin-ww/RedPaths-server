@@ -1,6 +1,7 @@
 package active_directory
 
 import (
+	rperror "RedPaths-server/internal/error"
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model"
 	"context"
@@ -18,6 +19,8 @@ type DomainRepository interface {
 	Create(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) // Returns UID
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Domain, error)
 	GetByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error)
+	GetByUID(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) (*model.Domain, error)
+
 	UpdateFields(ctx context.Context, uid string, fields map[string]interface{}) error
 	CreateWithObject(ctx context.Context, tx *dgo.Txn, model *model.Domain, actor string) (string, error)
 
@@ -76,15 +79,40 @@ func (r *DgraphDomainRepository) GetByName(ctx context.Context, tx *dgo.Txn, pro
 	)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get entity by name failed with message %w", err)
 	}
 
 	if len(domains) == 0 {
-		return nil, fmt.Errorf("domain not found")
+		return nil, rperror.ErrNotFound
 	}
 
 	return domains[0], nil
 }
+
+func (r *DgraphDomainRepository) GetByUID(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) (*model.Domain, error) {
+	fields := []string{"uid", "name"}
+
+	domains, err := dgraphutil.GetEntityByFieldInProject[*model.Domain](
+		ctx,
+		tx,
+		projectUID,
+		"Domain",
+		"uid",
+		domainUID,
+		fields,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("get entity by uid failed with message %w", err)
+	}
+
+	if len(domains) == 0 {
+		return nil, rperror.ErrNotFound
+	}
+
+	return domains[0], nil
+}
+
 func (r *DgraphDomainRepository) AddToProject(
 	ctx context.Context,
 	tx *dgo.Txn,
