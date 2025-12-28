@@ -13,8 +13,8 @@ import (
 //go:embed redpaths.sql
 var schemaSQL string
 
-// InitializePostgresSchema initializes the PostgreSQL schema
-func InitializePostgresSchema(gormDB *gorm.DB) error {
+// InitializePostgresScheme initializes the PostgreSQL schema
+func InitializePostgresScheme(gormDB *gorm.DB) error {
 	// Get the underlying *sql.DB from GORM
 	sqlDB, err := gormDB.DB()
 	if err != nil {
@@ -24,13 +24,13 @@ func InitializePostgresSchema(gormDB *gorm.DB) error {
 	sqlDB.SetMaxIdleConns(25)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
-	commands := strings.Split(schemaSQL, ";")
+	commands := strings.Split(schemaSQL, ""+
+		";")
 	for _, cmd := range commands {
 		cmd = strings.TrimSpace(cmd)
 		if cmd == "" {
 			continue
 		}
-
 		result := gormDB.Exec(cmd)
 		if result.Error != nil {
 			return fmt.Errorf("failed to execute SQL command: %v", result.Error)

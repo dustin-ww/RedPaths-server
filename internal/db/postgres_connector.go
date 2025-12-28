@@ -58,14 +58,17 @@ func GetPostgresDB() (*gorm.DB, error) {
 		db, err := gorm.Open(postgres.Open(dsn), config)
 
 		if err != nil {
-			pgErr = fmt.Errorf("gorm connection failed: %w", err)
+			pgErr = fmt.Errorf("gorm connection to postgres db failed: %w", err)
 			return
 		}
-		setup.InitializePostgresSchema(db)
+		err = setup.InitializePostgresScheme(db)
+		if err != nil {
+			log.Printf("Error while initializing postgres scheme with message: %v", err)
+		}
 
 		if !isPotgresInitialized(db) {
 			log.Println("WARNING: POSTGRES is not initialized yet! Initializing database...")
-			err := setup.InitializePostgresSchema(db)
+			err := setup.InitializePostgresScheme(db)
 			if err != nil {
 				pgErr = fmt.Errorf("gorm connection failed: %w", err)
 				return

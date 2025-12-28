@@ -21,7 +21,8 @@ func InitLogger() error {
 
 	multiWriter := io.MultiWriter(os.Stdout, file)
 	slog.SetDefault(slog.New(slog.NewJSONHandler(multiWriter, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level:     slog.LevelInfo,
+		AddSource: true,
 	})))
 
 	return nil
