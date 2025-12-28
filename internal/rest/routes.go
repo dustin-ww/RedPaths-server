@@ -3,7 +3,7 @@ package rest
 import (
 	"RedPaths-server/internal/rest/handlers"
 	"RedPaths-server/internal/rest/middleware"
-	"RedPaths-server/pkg/service"
+	rpservice "RedPaths-server/pkg/service"
 	"RedPaths-server/pkg/service/active_directory"
 	"RedPaths-server/pkg/service/redpaths"
 
@@ -21,7 +21,7 @@ func RegisterServerHandlers(router *gin.Engine) {
 func RegisterProjectHandlers(
 	router *gin.Engine,
 	projectService *active_directory.ProjectService,
-	logService *service.LogService,
+	logService *rpservice.LogService,
 	domainService *active_directory.DomainService,
 	hostService *active_directory.HostService,
 	serviceService *active_directory.ServiceService,
@@ -51,10 +51,11 @@ func RegisterProjectHandlers(
 			{
 				domains.GET("", projectHandler.GetDomains)
 				domains.POST("", projectHandler.AddDomain)
-
 				domain := domains.Group("/:domainUID")
-				domain.Use(middleware.DomainContext(domainService))
+				domain.Use(middleware.DomainContext(projectService))
 				{
+					domains.PATCH("", domainHandler.UpdateDomain)
+
 					domain.GET("/hosts", domainHandler.GetHosts)
 					domain.POST("/hosts", domainHandler.AddHost)
 				}
@@ -67,8 +68,18 @@ func RegisterProjectHandlers(
 				hosts.GET("", projectHandler.GetHosts)
 
 				host := hosts.Group("/:hostUID")
+				host.Use(middleware.HostContext(projectService))
 				{
+					host.PATCH("", hostHandler.UpdateHost)
+
 					host.GET("/services", serviceHandler.GetServices)
+
+					service := host.Group("/:serviceUID")
+					service.Use(middleware.ServiceContext(hostService))
+					{
+						service.PATCH("", serviceHandler.UpdateService)
+					}
+
 				}
 			}
 
@@ -76,6 +87,13 @@ func RegisterProjectHandlers(
 			{
 				users.GET("", projectHandler.GetUsers)
 				users.POST("", userHandler.CreateUser)
+
+				user := users.Group("/:userUID")
+				user.Use(middleware.UserContext(projectService))
+				{
+					user.PATCH("", userHandler.UpdateUser)
+				}
+
 			}
 
 			targets := project.Group("/targets")

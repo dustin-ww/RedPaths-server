@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	restcontext "RedPaths-server/internal/rest/context"
 	"RedPaths-server/pkg/service/active_directory"
 	"log"
 	"net/http"
@@ -42,4 +43,30 @@ func (h *ServiceHandler) GetServices(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, services)
+}
+
+func (h *ServiceHandler) UpdateService(c *gin.Context) {
+
+	service := restcontext.Service(c)
+	var fieldsToUpdate map[string]interface{}
+
+	if err := c.BindJSON(&fieldsToUpdate); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "INVALID_JSON"})
+		return
+	}
+	updatedService, err := h.serviceService.UpdateService(c.Request.Context(), service.UID, "UserInput", fieldsToUpdate)
+
+	if err != nil {
+		log.Printf("Sending 500 response while updating service because: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed to update service",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "Service updated successfully",
+		"updated_domain": updatedService,
+	})
 }

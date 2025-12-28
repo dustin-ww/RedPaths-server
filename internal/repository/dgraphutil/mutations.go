@@ -15,15 +15,37 @@ import (
 	"github.com/google/uuid"
 )
 
-// UpdateFields updates specific fields of a node and sets the updated_at timestamp
-func UpdateFields(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) error {
-	if tx == nil {
-		return fmt.Errorf("transaction cannot be nil")
+func MapToStruct(m map[string]interface{}, out interface{}) error {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
 	}
+	return json.Unmarshal(b, out)
+}
+
+func UpdateAndGet[T any](
+	ctx context.Context,
+	tx *dgo.Txn,
+	uid string,
+	actor string,
+	fields map[string]interface{},
+	get func(context.Context, *dgo.Txn, string) (*T, error),
+) (*T, error) {
 
 	fields["uid"] = uid
-	fields["updated_at"] = time.Now().Format(time.RFC3339)
-	return executeMutation(ctx, tx, fields)
+	fields["last_seen_by"] = actor
+	fields["last_seen_at"] = time.Now().Format(time.RFC3339)
+
+	jsonData, err := json.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Mutate(ctx, &api.Mutation{SetJson: jsonData}); err != nil {
+		return nil, err
+	}
+
+	return get(ctx, tx, uid)
 }
 
 // GetEntitiesByRelation retrieves entities that have a relationship to a specific UID

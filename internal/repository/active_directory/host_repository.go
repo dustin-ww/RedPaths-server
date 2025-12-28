@@ -13,6 +13,7 @@ import (
 )
 
 type HostRepository interface {
+	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Host, error)
 	Create(ctx context.Context, tx *dgo.Txn, host *model.Host, actor string) (string, error)
 	SetDomainController(ctx context.Context, hostUID string, isDC bool) error
 	AddService(ctx context.Context, tx *dgo.Txn, hostUID, serviceUID string) error
@@ -22,13 +23,24 @@ type HostRepository interface {
 	GetByProjectIncludingDomains(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error)
 
 	// HOSTS WITH UNDEFINED DOMAIN
-	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error)
+	GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error)
+
 	// HOSTS WITH KNOWN/DISCOVERED DOMAIN
-	GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.Host, error)
+	GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.Host, error)
+
+	UpdateHost(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Host, error)
 }
 
 type DraphHostRepository struct {
 	DB *dgo.Dgraph
+}
+
+func (r *DraphHostRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Host, error) {
+	panic("implement me")
+}
+
+func (r *DraphHostRepository) UpdateHost(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Host, error) {
+	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }
 
 func (r *DraphHostRepository) FindByIPInDomain(ctx context.Context, tx *dgo.Txn, domainUID string, ip string) (*model.Host, error) {
@@ -141,7 +153,7 @@ func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *mod
 }
 
 // WITH DOMAIN
-func (r *DraphHostRepository) GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.Host, error) {
+func (r *DraphHostRepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.Host, error) {
 	fields := []string{
 		"uid",
 		"ip",
@@ -169,7 +181,7 @@ func (r *DraphHostRepository) GetByDomainUID(ctx context.Context, tx *dgo.Txn, d
 }
 
 // WITHOUT DOMAIN
-func (r *DraphHostRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error) {
+func (r *DraphHostRepository) GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error) {
 	fields := []string{
 		"uid",
 		"name",
@@ -221,8 +233,8 @@ func (r *DraphHostRepository) AddToDomain(
 	err := dgraphutil.AddRelation(ctx, tx, hostUID, domainUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking reverse relation from host %s to domain %s with relation %s", hostUID, domainUID, relationName)
-	} else {
-		log.Printf("linked host %s to domain %s with relation %s", hostUID, domainUID, relationName)
 	}
+
+	log.Printf("linked host %s to domain %s with relation %s", hostUID, domainUID, relationName)
 	return nil
 }

@@ -18,10 +18,10 @@ type DomainRepository interface {
 	//CRUD
 	Create(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) // Returns UID
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Domain, error)
-	GetByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error)
-	GetByUID(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) (*model.Domain, error)
+	GetByNameInProject(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error)
+	GetByUIDInProject(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) (*model.Domain, error)
 
-	UpdateFields(ctx context.Context, uid string, fields map[string]interface{}) error
+	UpdateDomain(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Domain, error)
 	CreateWithObject(ctx context.Context, tx *dgo.Txn, model *model.Domain, actor string) (string, error)
 
 	//Relations
@@ -33,7 +33,7 @@ type DomainRepository interface {
 	DomainExistsByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (bool, error)
 
 	// Reverse Relations
-	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Domain, error)
+	GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Domain, error)
 }
 
 type DgraphDomainRepository struct {
@@ -65,7 +65,7 @@ func (r *DgraphDomainRepository) CreateWithObject(ctx context.Context, tx *dgo.T
 	return assigned.Uids["blank-0"], nil
 }
 
-func (r *DgraphDomainRepository) GetByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error) {
+func (r *DgraphDomainRepository) GetByNameInProject(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*model.Domain, error) {
 	fields := []string{"uid", "name"}
 
 	domains, err := dgraphutil.GetEntityByFieldInProject[*model.Domain](
@@ -89,7 +89,7 @@ func (r *DgraphDomainRepository) GetByName(ctx context.Context, tx *dgo.Txn, pro
 	return domains[0], nil
 }
 
-func (r *DgraphDomainRepository) GetByUID(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) (*model.Domain, error) {
+func (r *DgraphDomainRepository) GetByUIDInProject(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) (*model.Domain, error) {
 	fields := []string{"uid", "name"}
 
 	domains, err := dgraphutil.GetEntityByFieldInProject[*model.Domain](
@@ -151,7 +151,7 @@ func (r *DgraphDomainRepository) Get(ctx context.Context, tx *dgo.Txn, uid strin
 
 }
 
-func (r *DgraphDomainRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Domain, error) {
+func (r *DgraphDomainRepository) GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Domain, error) {
 	fields := []string{
 		"uid",
 		"name",
@@ -197,9 +197,8 @@ func (r *DgraphDomainRepository) Create(ctx context.Context, tx *dgo.Txn, name s
 	panic("implement me")
 }
 
-func (r *DgraphDomainRepository) UpdateFields(ctx context.Context, uid string, fields map[string]interface{}) error {
-	//TODO implement me
-	panic("implement me")
+func (r *DgraphDomainRepository) UpdateDomain(ctx context.Context, tx *dgo.Txn, uid string, actor string, fields map[string]interface{}) (*model.Domain, error) {
+	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }
 
 func (r *DgraphDomainRepository) AddHost(ctx context.Context, tx *dgo.Txn, domainUID, hostUID string) error {

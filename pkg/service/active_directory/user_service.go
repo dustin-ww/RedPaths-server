@@ -3,6 +3,7 @@ package active_directory
 import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
+	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	"context"
 	"fmt"
@@ -46,4 +47,26 @@ func (s *UserService) Create(ctx context.Context, user *model.ADUser, projectUID
 		return nil
 	})
 	return createdUser, err
+}
+
+func (s *UserService) UpdateUser(ctx context.Context, uid, actor string, fields map[string]interface{}) (*model.ADUser, error) {
+	if uid == "" {
+		return nil, utils.ErrUIDRequired
+	}
+
+	/*allowed := map[string]bool{"name": true, "description": true}
+	protected := map[string]bool{"uid": true, "created_at": true, "updated_at": true, "type": true}
+
+	for field := range fields {
+		if protected[field] {
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldProtected, field)
+		}
+		if !allowed[field] {
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldNotAllowed, field)
+		}
+	}*/
+
+	return db.ExecuteInTransactionWithResult[*model.ADUser](ctx, s.db, func(tx *dgo.Txn) (*model.ADUser, error) {
+		return s.userRepo.UpdateUser(ctx, tx, uid, actor, fields)
+	})
 }

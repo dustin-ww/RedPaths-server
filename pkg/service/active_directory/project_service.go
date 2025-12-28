@@ -82,7 +82,7 @@ func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incom
 }
 
 func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*model.Domain, error) {
-	domain, err := s.domainRepo.GetByName(ctx, tx, projectUID, domainName)
+	domain, err := s.domainRepo.GetByNameInProject(ctx, tx, projectUID, domainName)
 	if err != nil {
 		if errors.Is(err, rperror.ErrNotFound) {
 			return nil, nil
@@ -93,9 +93,9 @@ func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Tx
 	return domain, nil
 }
 
-func (s *ProjectService) GetByUID(ctx context.Context, projectUID, domainUID string) (*model.Domain, error) {
+func (s *ProjectService) GetDomainInProjectByUID(ctx context.Context, projectUID, domainUID string) (*model.Domain, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.Domain, error) {
-		domain, err := s.domainRepo.GetByUID(ctx, tx, projectUID, domainUID)
+		domain, err := s.domainRepo.GetByUIDInProject(ctx, tx, projectUID, domainUID)
 		if err != nil {
 			if errors.Is(err, rperror.ErrNotFound) {
 				return nil, nil
@@ -134,7 +134,7 @@ func (s *ProjectService) createAndLinkDomain(
 
 func (s *ProjectService) GetProjectDomains(ctx context.Context, projectUID string) ([]*model.Domain, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Domain, error) {
-		return s.domainRepo.GetByProjectUID(ctx, tx, projectUID)
+		return s.domainRepo.GetAllByProjectUID(ctx, tx, projectUID)
 	})
 }
 
@@ -225,10 +225,10 @@ func (s *ProjectService) Get(ctx context.Context, projectUID string) (*model.Pro
 	})
 }
 
-// UpdateFields updates specified fields of a project.
-func (s *ProjectService) UpdateFields(ctx context.Context, uid string, fields map[string]interface{}) error {
+// UpdateProject updates specified fields of a project.
+func (s *ProjectService) UpdateProject(ctx context.Context, uid, actor string, fields map[string]interface{}) (*model.Project, error) {
 	if uid == "" {
-		return utils.ErrUIDRequired
+		return nil, utils.ErrUIDRequired
 	}
 
 	allowed := map[string]bool{"name": true, "description": true}
@@ -236,15 +236,15 @@ func (s *ProjectService) UpdateFields(ctx context.Context, uid string, fields ma
 
 	for field := range fields {
 		if protected[field] {
-			return fmt.Errorf("%w: %s", utils.ErrFieldProtected, field)
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldProtected, field)
 		}
 		if !allowed[field] {
-			return fmt.Errorf("%w: %s", utils.ErrFieldNotAllowed, field)
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldNotAllowed, field)
 		}
 	}
 
-	return db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		return s.projectRepo.UpdateFields(ctx, tx, uid, fields)
+	return db.ExecuteInTransactionWithResult[*model.Project](ctx, s.db, func(tx *dgo.Txn) (*model.Project, error) {
+		return s.projectRepo.UpdateProject(ctx, tx, uid, actor, fields)
 	})
 }
 
@@ -269,9 +269,45 @@ func (s *ProjectService) GetHostsByProject(ctx context.Context, projectUID strin
 	})
 }
 
-func (s *ProjectService) GetUserByProject(ctx context.Context, projectUID string) ([]*model.ADUser, error) {
+// TODO: Direct query
+func (s *ProjectService) GetHostByProject(ctx context.Context, projectUID, hostUID string) (*model.Host, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.Host, error) {
+		hosts, err := s.hostRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to get host by project: %w", err)
+		}
+
+		for _, host := range hosts {
+			if host.UID == hostUID {
+				return host, nil
+			}
+		}
+		return nil, rperror.ErrNotFound
+	})
+}
+
+func (s *ProjectService) GetAllUserInProject(ctx context.Context, projectUID string) ([]*model.ADUser, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.ADUser, error) {
 		return s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 
+	})
+}
+
+func (s *ProjectService) GetUserInProject(ctx context.Context, projectUID, userUID string) (*model.ADUser, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.ADUser, error) {
+		users, err := s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user by project: %w", err)
+		}
+
+		for _, user := range users {
+			if user.UID == userUID {
+				return user, nil
+			}
+		}
+		log.Println("Not user found for given user UID")
+		return nil, rperror.ErrNotFound
 	})
 }

@@ -115,3 +115,20 @@ func ExecuteRead[T any](ctx context.Context, db *dgo.Dgraph, op func(tx *dgo.Txn
 	defer tx.Discard(ctx)
 	return op(tx)
 }
+
+func ExecuteInTransactionWithResult[T any](ctx context.Context, db *dgo.Dgraph, op func(tx *dgo.Txn) (T, error)) (T, error) {
+	var zero T
+	tx := db.NewTxn()
+	defer tx.Discard(ctx)
+
+	result, err := op(tx)
+	if err != nil {
+		return zero, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return zero, fmt.Errorf("commit failed: %w", err)
+	}
+
+	return result, nil
+}

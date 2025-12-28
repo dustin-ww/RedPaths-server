@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	restcontext "RedPaths-server/internal/rest/context"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/service/active_directory"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -58,5 +60,31 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		"status":       "success",
 		"message":      "New user has been created",
 		"created_user": createdUser,
+	})
+}
+
+func (h *UserHandler) UpdateUser(c *gin.Context) {
+
+	user := restcontext.User(c)
+	var fieldsToUpdate map[string]interface{}
+
+	if err := c.BindJSON(&fieldsToUpdate); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "INVALID_JSON"})
+		return
+	}
+	updatedUser, err := h.userService.UpdateUser(c.Request.Context(), user.UID, "UserInput", fieldsToUpdate)
+
+	if err != nil {
+		log.Printf("Sending 500 response while updating user because: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed to update user",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "User updated successfully",
+		"updated_user": updatedUser,
 	})
 }

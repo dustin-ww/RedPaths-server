@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/dgraph-io/dgo/v210"
-	"github.com/dgraph-io/dgo/v210/protos/api"
 )
 
 type UserRepository interface {
+	Get(ctx context.Context, tx *dgo.Txn, userUID string) (*model.ADUser, error)
 	Create(ctx context.Context, tx *dgo.Txn, incomingUser *model.ADUser, actor string) (*model.ADUser, error)
 	AddToDomain(ctx context.Context, tx *dgo.Txn, userID string, domainUID string) error
 	UserExistsByName(ctx context.Context, tx *dgo.Txn, projectUID string, name string) (bool, error)
@@ -22,12 +22,16 @@ type UserRepository interface {
 	GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.ADUser, error)
 	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.ADUser, error)
 
-	UpdateFields(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) error
+	UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.ADUser, error)
 	GetByProjectIncludingDomains(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.ADUser, error)
 }
 
 type DraphUserRepository struct {
 	DB *dgo.Dgraph
+}
+
+func (r *DraphUserRepository) Get(ctx context.Context, tx *dgo.Txn, userUID string) (*model.ADUser, error) {
+	panic("implement me")
 }
 
 func (r *DraphUserRepository) AddToDomain(ctx context.Context, tx *dgo.Txn, userID string, domainUID string) error {
@@ -247,21 +251,6 @@ func (r *DraphUserRepository) GetByProjectIncludingDomains(
 	return users, nil
 }
 
-func (r *DraphUserRepository) UpdateFields(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) error {
-	fields["uid"] = uid
-
-	updateJSON, err := json.Marshal(fields)
-	if err != nil {
-		return fmt.Errorf("error while updating user with json %s and error: %w", updateJSON, err)
-	}
-
-	mu := &api.Mutation{
-		SetJson: updateJSON,
-	}
-
-	_, err = tx.Mutate(ctx, mu)
-	if err != nil {
-		return fmt.Errorf("mutation error: %w", err)
-	}
-	return nil
+func (r *DraphUserRepository) UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.ADUser, error) {
+	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }

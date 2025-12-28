@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	restcontext "RedPaths-server/internal/rest/context"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/service/active_directory"
 	"fmt"
@@ -189,21 +190,29 @@ func (h *ProjectHandler) CreateProject(c *gin.Context) {
 }
 
 func (h *ProjectHandler) UpdateProject(c *gin.Context) {
-	uid := c.Param("projectUID")
-	var fields map[string]interface{}
+	project := restcontext.Project(c)
+	var fieldsToUpdate map[string]interface{}
 
-	if err := c.BindJSON(&fields); err != nil {
-		c.JSON(400, gin.H{"error": "INVALID_JSON"})
-		return
-	}
-	fmt.Printf("Anzahl der Felder im Handler: %d\n", len(fields))
-
-	if err := h.projectService.UpdateFields(c, uid, fields); err != nil {
-		HandleServiceError(c, err)
+	if err := c.BindJSON(&fieldsToUpdate); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "INVALID_JSON"})
 		return
 	}
 
-	c.JSON(200, gin.H{"status": "success"})
+	updatedProject, err := h.projectService.UpdateProject(c.Request.Context(), project.UID, "UserInput", fieldsToUpdate)
+
+	if err != nil {
+		log.Printf("Sending 500 response while updating project because: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed to update project",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":         "Project updated successfully",
+		"updated_project": updatedProject,
+	})
 }
 
 func (h *ProjectHandler) AddDomain(c *gin.Context) {
@@ -311,7 +320,7 @@ func (h *ProjectHandler) GetUsers(c *gin.Context) {
 		return
 	}
 
-	domains, err := h.projectService.GetUserByProject(
+	domains, err := h.projectService.GetAllUserInProject(
 		c.Request.Context(),
 		uid,
 	)

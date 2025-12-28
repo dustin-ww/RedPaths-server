@@ -2,8 +2,10 @@ package active_directory
 
 import (
 	"RedPaths-server/internal/db"
+	rperror "RedPaths-server/internal/error"
 	"RedPaths-server/internal/repository/active_directory"
 	"RedPaths-server/internal/repository/dgraphutil"
+	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	"context"
 	"fmt"
@@ -95,8 +97,48 @@ func (s *HostService) CreateWithUnknownDomain(ctx context.Context, host *model.H
 	return hostUID, err
 }
 
-func (s *HostService) GetHostServices(ctx context.Context, hostUID string) ([]*model.Service, error) {
+func (s *HostService) GetAllServicesByHost(ctx context.Context, hostUID string) ([]*model.Service, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Service, error) {
 		return s.serviceRepo.GetByHostUID(ctx, tx, hostUID)
+	})
+}
+
+func (s *HostService) GetServiceByHost(ctx context.Context, hostUID, serviceUID string) (*model.Service, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.Service, error) {
+		services, err := s.serviceRepo.GetByHostUID(ctx, tx, hostUID)
+		if err != nil {
+			log.Printf("Failed to get service by host uid %s: %v", hostUID, err)
+			return nil, err
+		}
+
+		for _, service := range services {
+			if service.UID == serviceUID {
+				return service, nil
+			}
+		}
+		log.Printf("Service not found by host uid %s", hostUID)
+		return nil, rperror.ErrNotFound
+	})
+}
+
+func (s *HostService) UpdateHost(ctx context.Context, uid, actor string, fields map[string]interface{}) (*model.Host, error) {
+	if uid == "" {
+		return nil, utils.ErrUIDRequired
+	}
+
+	/*allowed := map[string]bool{"name": true, "description": true}
+	protected := map[string]bool{"uid": true, "created_at": true, "updated_at": true, "type": true}
+
+	for field := range fields {
+		if protected[field] {
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldProtected, field)
+		}
+		if !allowed[field] {
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldNotAllowed, field)
+		}
+	}*/
+
+	return db.ExecuteInTransactionWithResult[*model.Host](ctx, s.db, func(tx *dgo.Txn) (*model.Host, error) {
+		return s.hostRepo.UpdateHost(ctx, tx, uid, actor, fields)
 	})
 }

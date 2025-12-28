@@ -3,6 +3,7 @@ package active_directory
 import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
+	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	"context"
 	"fmt"
@@ -73,6 +74,28 @@ func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *mod
 }
 func (s *DomainService) GetDomainHosts(ctx context.Context, domainUID string) ([]*model.Host, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Host, error) {
-		return s.hostRepo.GetByDomainUID(ctx, tx, domainUID)
+		return s.hostRepo.GetAllByDomainUID(ctx, tx, domainUID)
+	})
+}
+
+func (s *DomainService) UpdateDomain(ctx context.Context, uid, actor string, fields map[string]interface{}) (*model.Domain, error) {
+	if uid == "" {
+		return nil, utils.ErrUIDRequired
+	}
+
+	/*allowed := map[string]bool{"name": true, "description": true}
+	protected := map[string]bool{"uid": true, "created_at": true, "updated_at": true, "type": true}
+
+	for field := range fields {
+		if protected[field] {
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldProtected, field)
+		}
+		if !allowed[field] {
+			return nil, fmt.Errorf("%w: %s", utils.ErrFieldNotAllowed, field)
+		}
+	}*/
+
+	return db.ExecuteInTransactionWithResult[*model.Domain](ctx, s.db, func(tx *dgo.Txn) (*model.Domain, error) {
+		return s.domainRepo.UpdateDomain(ctx, tx, uid, actor, fields)
 	})
 }

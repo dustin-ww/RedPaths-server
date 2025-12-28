@@ -13,7 +13,7 @@ func DomainContext(projectService *active_directory.ProjectService) gin.HandlerF
 		projectUID := c.Param("projectUID")
 		domainUID := c.Param("domainUID")
 
-		domain, err := projectService.GetByUID(c.Request.Context(), projectUID, domainUID)
+		domain, err := projectService.GetDomainInProjectByUID(c.Request.Context(), projectUID, domainUID)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 				"error": "domain not found in project",

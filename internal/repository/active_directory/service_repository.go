@@ -14,7 +14,7 @@ type ServiceRepository interface {
 	//CRUD
 	CreateWithObject(ctx context.Context, tx *dgo.Txn, model model.Service) (string, error)
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Service, error)
-	UpdateFields(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) error
+	UpdateService(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Service, error)
 	//Relations
 	LinkToHost(ctx context.Context, tx *dgo.Txn, serviceUID, hostUID string) error
 	GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*model.Service, error)
@@ -24,9 +24,9 @@ type DgraphServiceRepository struct {
 	DB *dgo.Dgraph
 }
 
-func (r *DgraphServiceRepository) UpdateFields(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) error {
-	//TODO implement me
-	panic("implement me")
+func (r *DgraphServiceRepository) UpdateService(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Service, error) {
+	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+
 }
 
 func NewDgraphServiceRepository(db *dgo.Dgraph) *DgraphServiceRepository {

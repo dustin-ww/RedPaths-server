@@ -22,7 +22,7 @@ type ProjectRepository interface {
 	// TODO: Move into target repo
 	GetTargets(ctx context.Context, tx *dgo.Txn, uid string) ([]*model.Target, error)
 	Delete(ctx context.Context, tx *dgo.Txn, uid string) error
-	UpdateFields(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) error
+	UpdateProject(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Project, error)
 
 	// Relations
 	AddDomain(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) error
@@ -68,6 +68,7 @@ func (r *DgraphProjectRepository) Create(ctx context.Context, tx *dgo.Txn, name 
 
 // Get retrieves a project by UID
 func (r *DgraphProjectRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Project, error) {
+	fmt.Println("REPO")
 	query := `
         query Project($uid: string) {
             project(func: uid($uid)) {
@@ -151,25 +152,11 @@ func (r *DgraphProjectRepository) GetAll(ctx context.Context, tx *dgo.Txn) ([]*m
 	return dgraphutil.GetAllEntities[*model.Project](ctx, tx, "Project", fields, 0, 0)
 }
 
-// UpdateFields updates specified fields on a project
-func (r *DgraphProjectRepository) UpdateFields(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) error {
-	fields["uid"] = uid
+// UpdateProject updates specified fields on a project
+func (r *DgraphProjectRepository) UpdateProject(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Project, error) {
+	// legacy
 	fields["updated_at"] = time.Now().Format(time.RFC3339)
-
-	updateJSON, err := json.Marshal(fields)
-	if err != nil {
-		return fmt.Errorf("marshal error: %w", err)
-	}
-
-	mu := &api.Mutation{
-		SetJson: updateJSON,
-	}
-
-	_, err = tx.Mutate(ctx, mu)
-	if err != nil {
-		return fmt.Errorf("mutation error: %w", err)
-	}
-	return nil
+	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }
 
 // Delete removes a project by UID
