@@ -47,4 +47,5 @@ deployments/devbox.lock
 
 *.xml
 
-modulelib/
+modulelib/attacks
+modulelib/enumeration

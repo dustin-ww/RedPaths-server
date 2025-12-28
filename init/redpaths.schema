@@ -1,258 +1,584 @@
-<name>: string @index(exact) .
-<has_target>: [uid] .
-<description>: string .
-<modified_at>: datetime .
-<created_at>: datetime .
-<belongs_to_project>: uid @reverse .
-<has_domain>: [uid] .
-<has_redpaths_modules>: [uid] .
-<has_host>: [uid] .
-<belongs_to_domain>: [uid] @reverse .
-<deployed_on_host>: uid @reverse .
-<has_user>: [uid] .
-<has_service>: [uid] .
-<port>: string .
-<is_domain_controller>: bool .
-<ntlm_hash>: string .
-<password>: string .
-<ip>: string @index(exact) .
-<is_admin>: bool .
-<tags>: [string] .
-<attack_id>: string @index(exact) .
-<metric>: string .
-<version>: string .
-<author>: string .
-<last_run>: datetime .
-<has_dependency>: [uid] .
-<is_assumed_by>: [uid] @reverse .
+created_at: datetime @index(hour) .
+modified_at: datetime @index(hour) .
+discovered_at: datetime @index(hour) .
+discovered_by: string .
+last_seen_at: datetime @index(hour) .
+last_seen_by: string .
 
-<last_seen_at>: datetime .
-<last_seen_by>: string .
-<is_verified>: bool .
-<is_usable>: bool .
-<discovered_at>: datetime .
-<discovered_by>: string .
-
-<dns_name>: string @index(exact) .
-<net_bios_name>: string @index(exact) .
-<domain_guid>: string @index(exact) .
-<domain_sid>: string .
-<domain_function_level>: string .
-<forest_function_level>: string .
-<fsmo_role_owners>: [string] .
-<security_policies>: uid .
-<trust_relationships>: [uid] .
-<last_modified>: datetime .
-<linked_gpos>: [string] .
-<default_containers>: [string] .
-<min_pwd_length>: int .
-<pwd_history_length>: int .
-<lockout_threshold>: int .
-<lockout_duration>: int .
-<trusted_domain>: string @index(exact) .
-<direction>: string .
-<trust_type>: string .
-<is_transitive>: bool .
-<note>: string .
-<initialized>: bool .
-<cidr>: int .
-
-<group_name>: string @index(exact) .
-<group_sid>: string @index(exact) .
-<group_scope>: string .
-<group_type>: string .
-
-<has_member>: [uid] @reverse .
-<member_of>: [uid] .
-
-<is_privileged>: bool .
-<is_builtin>: bool .
-
-<privileges>: [string] .
-
-<can_dcsync>: bool .
-<can_rdp>: bool .
-<can_logon_locally>: bool .
-
-<risk_score>: int .
-<risk_reasons>: [string] .
-
-<user_sid>: string @index(exact) .
-<sam_account_name>: string @index(exact) .
-<user_principal_name>: string @index(exact) .
-
-<member_of_group>: [uid] @reverse .
-
-<last_logon>: datetime .
-<pwd_last_set>: datetime .
-<bad_pwd_count>: int .
-
-<is_disabled>: bool .
-<is_locked>: bool .
-<is_service_account>: bool .
-
-<allowed_to_delegate>: bool .
-<has_spn>: bool .
-
+project.name: string @index(exact, term) .
+project.tags: [string] .
+project.description: string .
+project.has_ad: [uid] @reverse .
+project.has_host: [uid] @reverse .
 
 type Project {
-  name
-  tags
-  description
-  has_target
+  project.name
+  project.tags
+  project.description
+  project.has_ad
+  project.has_host
   created_at
   modified_at
-  has_domain
-  has_host
-  has_user
-  has_redpaths_modules
   dgraph.type
 }
 
-type RedPathsModule {
-  attack_id
-  metric
-  name
-  version
-  author
-  last_run
-  has_dependency
-  is_assumed_by
-  dgraph.type
+active_directory.forest_name: string @index(exact, term) .
+active_directory.forest_functional_level: string .
+active_directory.has_domain: [uid] @reverse .
+
+type ActiveDirectory {
+  active_directory.forest_name
+  active_directory.forest_functional_level
+  active_directory.has_domain
+  created_at
+  modified_at
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
-
-}
-
-type Target {
-  ip
-  cidr
-  note
   dgraph.type
-  is_verified
-  created_at
 }
+
+domain.name: string @index(exact, term) .
+domain.description: string .
+domain.dns_name: string @index(exact) @upsert .
+domain.netbios_name: string @index(exact) .
+domain.domain_guid: string @index(exact) @upsert .
+domain.domain_sid: string @index(exact) @upsert .
+domain.domain_functional_level: string .
+domain.forest_functional_level: string .
+domain.fsmo_role_owners: [string] .
+domain.linked_gpos: [string] .
+domain.default_containers: [string] .
+domain.contains: [uid] @reverse .
+domain.has_principals: [uid] @reverse .
+domain.has_trust: [uid] @reverse .
+domain.has_acl: uid @reverse .
+domain.has_gpo_link: [uid] @reverse .
+domain.security_policy: uid @reverse .
 
 type Domain {
-  name
-  description
-  dns_name
-  net_bios_name
-  domain_guid
-  domain_sid
-  domain_function_level
-  forest_function_level
-  fsmo_role_owners
-  security_policies
-  trust_relationships
+  domain.name
+  domain.description
+  domain.dns_name
+  domain.netbios_name
+  domain.domain_guid
+  domain.domain_sid
+  domain.domain_functional_level
+  domain.forest_functional_level
+  domain.fsmo_role_owners
+  domain.linked_gpos
+  domain.default_containers
+  domain.contains
+  domain.has_principals
+  domain.has_trust
+  domain.has_acl
+  domain.has_gpo_link
+  domain.security_policy
   created_at
-  last_modified
-  linked_gpos
-  default_containers
-  belongs_to_project
-  has_host
-  has_user
-  dgraph.type
+  modified_at
   discovered_at
   discovered_by
   last_seen_at
   last_seen_by
-}
-
-type SecurityPolicy {
-  min_pwd_length
-  pwd_history_length
-  lockout_threshold
-  lockout_duration
   dgraph.type
 }
+
+trust.trust_type: string @index(exact) .
+trust.direction: string @index(exact) .
+trust.is_transitive: bool @index(bool) .
+trust.trusted_domain: string @index(exact) .
 
 type Trust {
-  trusted_domain
-  direction
-  trust_type
-  is_transitive
-  dgraph.type
-}
-
-type Host {
-  ip
-  name
-  is_domain_controller
-  belongs_to_domain
-  description
-  has_service
-  dgraph.type
+  trust.trust_type
+  trust.direction
+  trust.is_transitive
+  trust.trusted_domain
+  created_at
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
+  dgraph.type
 }
 
-type Service {
-  name
-  sid
+security_policy.min_pwd_length: int .
+security_policy.pwd_history_length: int .
+security_policy.lockout_threshold: int .
+security_policy.lockout_duration: int .
 
-  description
-  port
-  deployed_on_host
-  dgraph.type
+type SecurityPolicy {
+  security_policy.min_pwd_length
+  security_policy.pwd_history_length
+  security_policy.lockout_threshold
+  security_policy.lockout_duration
   discovered_at
   discovered_by
-  last_seen_at
-  last_seen_by
+  dgraph.type
 }
+
+directory_node.name: string @index(exact, term) .
+directory_node.description: string .
+directory_node.distinguished_name: string @index(exact) @upsert .
+directory_node.node_type: string @index(exact) .
+directory_node.is_builtin: bool @index(bool) .
+directory_node.parent: uid @reverse .
+directory_node.locates: [uid] @reverse .
+directory_node.has_acl: uid @reverse .
+directory_node.has_gpo_link: [uid] @reverse .
+
+type DirectoryNode {
+  directory_node.name
+  directory_node.description
+  directory_node.distinguished_name
+  directory_node.node_type
+  directory_node.is_builtin
+  directory_node.parent
+  directory_node.locates
+  directory_node.has_acl
+  directory_node.has_gpo_link
+  created_at
+  modified_at
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+security_principal.name: string @index(exact, term) .
+security_principal.sid: string @index(exact) @upsert .
+security_principal.description: string .
+security_principal.has_capability: [uid] @reverse .
+security_principal.owns: [uid] @reverse .
+security_principal.has_acl: uid @reverse .
+
+user.sam_account_name: string @index(exact) .
+user.upn: string @index(exact) .
+user.is_disabled: bool @index(bool) .
+user.is_locked: bool @index(bool) .
+user.is_service_account: bool @index(bool) .
+user.last_logon: datetime @index(hour) .
+user.pwd_last_set: datetime @index(hour) .
+user.bad_pwd_count: int .
+user.allowed_to_delegate: bool @index(bool) .
+user.has_spn: bool @index(bool) .
+user.has_session: [uid] @reverse .
 
 type User {
-  name
-  sid
-  description
-  sam_account_name
-  user_principal_name
-  ntlm_hash
-  password
-  is_admin
-  is_usable
-  is_disabled
-  is_locked
-  is_service_account
-  belongs_to_domain
-  member_of_group
-  last_logon
-  pwd_last_set
-  bad_pwd_count
-  allowed_to_delegate
-  has_spn
-  dgraph.type
+  security_principal.name
+  security_principal.sid
+  security_principal.description
+  security_principal.has_capability
+  security_principal.owns
+  security_principal.has_acl
+  user.sam_account_name
+  user.upn
+  user.is_disabled
+  user.is_locked
+  user.is_service_account
+  user.last_logon
+  user.pwd_last_set
+  user.bad_pwd_count
+  user.allowed_to_delegate
+  user.has_spn
+  user.has_session
+  group.member_of
+  created_at
+  modified_at
   discovered_at
   discovered_by
   last_seen_at
   last_seen_by
+  dgraph.type
 }
+
+group.group_scope: string @index(exact) .
+group.group_type: string @index(exact) .
+group.is_privileged: bool @index(bool) .
+group.is_builtin: bool @index(bool) .
+group.privileges: [string] .
+group.can_dcsync: bool @index(bool) .
+group.can_rdp: bool @index(bool) .
+group.can_logon_locally: bool @index(bool) .
+group.risk_score: int @index(int) .
+group.risk_reasons: [string] .
+group.has_member: [uid] @reverse .
+group.member_of: [uid] @reverse .
 
 type Group {
-  name
-  description
-  sid
-  group_scope
-  group_type
-  belongs_to_domain
-  has_member
-  member_of
-  privileges
-  is_privileged
-  is_builtin
-  can_dcsync
-  can_rdp
-  can_logon_locally
-  risk_score
-  risk_reasons
-  dgraph.type
+  security_principal.name
+  security_principal.sid
+  security_principal.description
+  security_principal.has_capability
+  security_principal.owns
+  security_principal.has_acl
+  group.group_scope
+  group.group_type
+  group.is_privileged
+  group.is_builtin
+  group.privileges
+  group.can_dcsync
+  group.can_rdp
+  group.can_logon_locally
+  group.risk_score
+  group.risk_reasons
+  group.has_member
+  group.member_of
+  created_at
+  modified_at
   discovered_at
   discovered_by
   last_seen_at
   last_seen_by
+  dgraph.type
 }
 
+service_account.has_spn: [uid] @reverse .
+
+type ServiceAccount {
+  security_principal.name
+  security_principal.sid
+  security_principal.description
+  security_principal.has_capability
+  security_principal.owns
+  security_principal.has_acl
+  user.sam_account_name
+  user.upn
+  user.is_disabled
+  user.is_locked
+  service_account.has_spn
+  group.member_of
+  created_at
+  modified_at
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+computer.hostname: string @index(exact, term) .
+computer.is_domain_controller: bool @index(bool) .
+computer.represents: uid @reverse .
+computer.has_delegation: uid @reverse .
+computer.has_spn: [uid] @reverse .
+
+type Computer {
+  security_principal.name
+  security_principal.sid
+  security_principal.description
+  security_principal.has_capability
+  security_principal.owns
+  security_principal.has_acl
+  computer.hostname
+  computer.is_domain_controller
+  computer.represents
+  computer.has_delegation
+  computer.has_spn
+  group.member_of
+  created_at
+  modified_at
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+host.hostname: string @index(exact, term) .
+host.ip: string @index(exact) .
+host.description: string .
+host.runs: [uid] @reverse .
+host.has_acl: uid @reverse .
+
+type Host {
+  host.hostname
+  host.ip
+  host.description
+  host.runs
+  host.has_acl
+  created_at
+  modified_at
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+  dgraph.type
+}
+
+service.name: string @index(exact, term) .
+service.port: string @index(exact) .
+service.description: string .
+
+type Service {
+  service.name
+  service.port
+  service.description
+  created_at
+  modified_at
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+spn.spn: string @index(exact) @upsert .
+spn.service_type: string @index(exact) .
+
+type SPN {
+  spn.spn
+  spn.service_type
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+credential.type: string @index(exact) .
+credential.is_usable: bool @index(bool) .
+credential.lifetime: int .
+credential.usable_on: [uid] @reverse .
+
+type Credential {
+  credential.type
+  credential.is_usable
+  credential.lifetime
+  credential.usable_on
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+  dgraph.type
+}
+
+kerberos_ticket.ticket_type: string @index(exact) .
+kerberos_ticket.spn: string .
+kerberos_ticket.delegation_type: string .
+
+type KerberosTicket {
+  credential.type
+  credential.is_usable
+  credential.lifetime
+  credential.usable_on
+  kerberos_ticket.ticket_type
+  kerberos_ticket.spn
+  kerberos_ticket.delegation_type
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+ntlm_hash.hash: string .
+
+type NTLMHash {
+  credential.type
+  credential.is_usable
+  credential.lifetime
+  credential.usable_on
+  ntlm_hash.hash
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+delegation_config.delegation_type: string @index(exact) .
+delegation_config.allowed_to_delegate_to: [string] .
+
+type DelegationConfig {
+  delegation_config.delegation_type
+  delegation_config.allowed_to_delegate_to
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+session.session_type: string @index(exact) .
+session.is_active: bool @index(bool) .
+session.login_time: datetime @index(hour) .
+session.on_host: uid @reverse .
+session.exposes: [uid] @reverse .
+
+type Session {
+  session.session_type
+  session.is_active
+  session.login_time
+  session.on_host
+  session.exposes
+  discovered_at
+  discovered_by
+  last_seen_at
+  last_seen_by
+  dgraph.type
+}
+
+capability.name: string @index(exact, term) .
+capability.scope: string @index(exact) .
+capability.risk_level: int @index(int) .
+capability.applies_to: [uid] @reverse .
+
+type Capability {
+  capability.name
+  capability.scope
+  capability.risk_level
+  capability.applies_to
+  dgraph.type
+}
+
+acl.owner: uid @reverse .
+acl.contains: [uid] @reverse .
+
+type ACL {
+  acl.owner
+  acl.contains
+  created_at
+  modified_at
+  dgraph.type
+}
+
+ace.access_type: string @index(exact) .
+ace.inherited: bool @index(bool) .
+ace.applies_to: string .
+ace.has_right: uid @reverse .
+ace.granted_to: uid @reverse .
+ace.derives: [uid] @reverse .
+
+type ACE {
+  ace.access_type
+  ace.inherited
+  ace.applies_to
+  ace.has_right
+  ace.granted_to
+  ace.derives
+  created_at
+  modified_at
+  dgraph.type
+}
+
+ad_right.name: string @index(exact) @upsert .
+ad_right.category: string @index(exact) .
+ad_right.risk_level: int @index(int) .
+ad_right.implies: [uid] @reverse .
+
+type ADRight {
+  ad_right.name
+  ad_right.category
+  ad_right.risk_level
+  ad_right.implies
+  dgraph.type
+}
+
+gpo.name: string @index(exact, term) .
+gpo.description: string .
+gpo.contains: [uid] @reverse .
+gpo.grants: [uid] @reverse .
+gpo.has_acl: uid @reverse .
+
+type GPO {
+  gpo.name
+  gpo.description
+  gpo.contains
+  gpo.grants
+  gpo.has_acl
+  created_at
+  modified_at
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+gpo_setting.setting_type: string @index(exact) .
+gpo_setting.value: string .
+
+type GPOSetting {
+  gpo_setting.setting_type
+  gpo_setting.value
+  discovered_at
+  discovered_by
+  dgraph.type
+}
+
+gpo_link.link_order: int .
+gpo_link.is_enforced: bool @index(bool) .
+gpo_link.is_enabled: bool @index(bool) .
+gpo_link.links_to: uid @reverse .
+
+type GPOLink {
+  gpo_link.link_order
+  gpo_link.is_enforced
+  gpo_link.is_enabled
+  gpo_link.links_to
+  created_at
+  modified_at
+  dgraph.type
+}
+
+attack.attack_id: string @index(exact) @upsert .
+attack.name: string @index(exact, term) .
+attack.cost: int .
+attack.noise: float .
+attack.reliability: float .
+attack.requires: [uid] @reverse .
+attack.grants: [uid] @reverse .
+attack.targets: [uid] @reverse .
+attack.produces: [uid] @reverse .
+
+type Attack {
+  attack.attack_id
+  attack.name
+  attack.cost
+  attack.noise
+  attack.reliability
+  attack.requires
+  attack.grants
+  attack.targets
+  attack.produces
+  dgraph.type
+}
+
+attack_result.success: bool @index(bool) .
+attack_result.noise_generated: float .
+
+type AttackResult {
+  attack_result.success
+  attack_result.noise_generated
+  created_at
+  dgraph.type
+}
+
+attack_state.timestamp: datetime @index(hour) .
+attack_state.total_noise: float .
+attack_state.total_cost: int .
+attack_state.history: [uid] @reverse .
+attack_state.active_capabilities: [uid] @reverse .
+
+type AttackState {
+  attack_state.timestamp
+  attack_state.total_noise
+  attack_state.total_cost
+  attack_state.history
+  attack_state.active_capabilities
+  dgraph.type
+}
+
+compromise_record.compromised_at: datetime @index(hour) .
+compromise_record.noise_generated: float .
+compromise_record.cost: int .
+compromise_record.compromised_principal: uid @reverse .
+compromise_record.compromised_host: uid @reverse .
+compromise_record.via_attack: uid @reverse .
+compromise_record.parent_compromise: uid @reverse .
+
+type CompromiseRecord {
+  compromise_record.compromised_at
+  compromise_record.noise_generated
+  compromise_record.cost
+  compromise_record.compromised_principal
+  compromise_record.compromised_host
+  compromise_record.via_attack
+  compromise_record.parent_compromise
+  dgraph.type
+}
+
+target.ip: string @index(exact) .
+target.cidr: int .
+target.note: string .
+target.is_verified: bool @index(bool) .
+
+type Target {
+  target.ip
+  target.cidr
+  target.note
+  target.is_verified
+  created_at
+  discovered_at
+  dgraph.type
+}

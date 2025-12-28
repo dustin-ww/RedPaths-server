@@ -6,6 +6,8 @@ import (
 )
 
 type ADUser struct {
+	BasePrincipal
+
 	UID  string `json:"uid,omitempty"`
 	Name string `json:"name,omitempty"`
 
@@ -47,4 +49,8 @@ type ADUser struct {
 	DiscoveredBy string    `json:"discovered_by,omitempty"`
 	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
 	LastSeenBy   string    `json:"last_seen_by,omitempty"`
+}
+
+func (u ADUser) PrincipalType() PrincipalType {
+	return PrincipalUser
 }

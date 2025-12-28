@@ -41,6 +41,27 @@ enumeration:
       inherits:
       loot_path: "/loot/dns"
 
+    ShareEnum:
+      name: "Share Enumeration"
+      attack_id: "enum03"
+      version: "0.1"
+      description: "DNS Cool"
+      author: "dw-sec"
+      execution_metric: "4h"
+      inherits:
+      loot_path: "/loot/dns"
+
+    UserEnum:
+      name: "User Enumeration"
+      attack_id: "enum04"
+      version: "0.1"
+      description: "DNS Cool"
+      author: "dw-sec"
+      execution_metric: "4h"
+      inherits:
+      loot_path: "/loot/dns"
+
+
 # Registered Attack Simulation Modules
 attack:
     PrinterNightmare:
