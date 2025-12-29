@@ -25,6 +25,8 @@ type ProjectRepository interface {
 	UpdateProject(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Project, error)
 
 	// Relations
+	AddActiveDirectory(ctx context.Context, tx *dgo.Txn, projectUID, activeDirectoryUID string) error
+
 	AddDomain(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) error
 	AddTarget(ctx context.Context, tx *dgo.Txn, projectUID, targetUID string) error
 	AddHostWithUnknownDomain(ctx context.Context, tx *dgo.Txn, projectUID, hostUID string) error
@@ -39,6 +41,16 @@ type DgraphProjectRepository struct {
 // NewDgraphProjectRepository creates a new Dgraph project repository
 func NewDgraphProjectRepository(db *dgo.Dgraph) *DgraphProjectRepository {
 	return &DgraphProjectRepository{DB: db}
+}
+
+// AddDomain connects a domain to a project
+func (r *DgraphProjectRepository) AddActiveDirectory(ctx context.Context, tx *dgo.Txn, projectUID, activeDirectoryUID string) error {
+	relationName := "has_ad"
+	err := dgraphutil.AddRelation(ctx, tx, projectUID, activeDirectoryUID, relationName)
+	if err != nil {
+		return fmt.Errorf("error while linking domain %s to project %s with relation %s", domainUID, projectUID, relationName)
+	}
+	return nil
 }
 
 // Create adds a new project to the database

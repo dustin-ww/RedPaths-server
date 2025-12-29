@@ -1,6 +1,7 @@
 package dgraphutil
 
 import (
+	"RedPaths-server/pkg/model"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -126,6 +127,16 @@ func AddRelation(ctx context.Context, tx *dgo.Txn, sourceUID, targetUID, relatio
 	}
 
 	return executeMutation(ctx, tx, update)
+}
+
+func InitCreateMetadata(meta *model.RedPathsMetadata, actor string) {
+	now := time.Now().UTC()
+
+	meta.CreatedAt = now
+	meta.DiscoveredAt = now
+	meta.LastSeenAt = now
+	meta.DiscoveredBy = actor
+	meta.LastSeenBy = actor
 }
 
 // OldCreateEntity creates a new entity with a unique blank node ID and returns the assigned UID
