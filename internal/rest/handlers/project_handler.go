@@ -2,7 +2,7 @@ package handlers
 
 import (
 	restcontext "RedPaths-server/internal/rest/context"
-	"RedPaths-server/pkg/model"
+	active_directory2 "RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/service/active_directory"
 	"fmt"
 	"log"
@@ -231,7 +231,7 @@ func (h *ProjectHandler) AddDomain(c *gin.Context) {
 
 	uid := c.Param("projectUID")
 
-	domain := &model.Domain{
+	domain := &active_directory2.Domain{
 		Name: request.Name,
 	}
 

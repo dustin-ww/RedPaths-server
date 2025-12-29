@@ -4,7 +4,7 @@ import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
 	"RedPaths-server/internal/utils"
-	"RedPaths-server/pkg/model"
+	active_directory2 "RedPaths-server/pkg/model/active_directory"
 	"context"
 	"fmt"
 	"log"
@@ -29,8 +29,8 @@ func NewUserService(dgraphCon *dgo.Dgraph) (*UserService, error) {
 	}, nil
 }
 
-func (s *UserService) Create(ctx context.Context, user *model.ADUser, projectUID string, actor string) (*model.ADUser, error) {
-	var createdUser *model.ADUser
+func (s *UserService) Create(ctx context.Context, user *active_directory2.User, projectUID string, actor string) (*active_directory2.User, error) {
+	var createdUser *active_directory2.User
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
 		var err error
@@ -49,7 +49,7 @@ func (s *UserService) Create(ctx context.Context, user *model.ADUser, projectUID
 	return createdUser, err
 }
 
-func (s *UserService) UpdateUser(ctx context.Context, uid, actor string, fields map[string]interface{}) (*model.ADUser, error) {
+func (s *UserService) UpdateUser(ctx context.Context, uid, actor string, fields map[string]interface{}) (*active_directory2.User, error) {
 	if uid == "" {
 		return nil, utils.ErrUIDRequired
 	}
@@ -66,7 +66,7 @@ func (s *UserService) UpdateUser(ctx context.Context, uid, actor string, fields 
 		}
 	}*/
 
-	return db.ExecuteInTransactionWithResult[*model.ADUser](ctx, s.db, func(tx *dgo.Txn) (*model.ADUser, error) {
+	return db.ExecuteInTransactionWithResult[*active_directory2.User](ctx, s.db, func(tx *dgo.Txn) (*active_directory2.User, error) {
 		return s.userRepo.UpdateUser(ctx, tx, uid, actor, fields)
 	})
 }

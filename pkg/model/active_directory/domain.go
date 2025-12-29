@@ -1,6 +1,7 @@
-package model
+package active_directory
 
 import (
+	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/model/redpaths/history"
 	"RedPaths-server/pkg/model/utils"
 	"log"
@@ -9,47 +10,40 @@ import (
 
 type Domain struct {
 	// Internal
-	UID              string         `json:"uid,omitempty"`
-	Name             string         `json:"name,omitempty"`
-	BelongsToProject utils.UIDRef   `json:"belongs_to_project,omitempty"`
-	HasHost          []utils.UIDRef `json:"has_host,omitempty"`
-	HasUser          []utils.UIDRef `json:"has_user,omitempty"`
-	DType            []string       `json:"dgraph.type,omitempty"`
-	// AD related ..
-	DNSName             string         `json:"dns_name,omitempty"`
-	NetBiosName         string         `json:"net_bios_name,omitempty"`
-	DomainGUID          string         `json:"domain_guid,omitempty"`
-	DomainSID           string         `json:"domain_sid,omitempty"`
-	DomainFunctionLevel string         `json:"domain_function_level,omitempty"`
-	ForestFunctionLevel string         `json:"forest_function_level,omitempty"`
-	FSMORoleOwners      []string       `json:"fsmo_role_owners,omitempty"`
-	SecurityPolicies    utils.UIDRef   `json:"security_policies,omitempty"`
-	TrustRelationships  []utils.UIDRef `json:"trust_relationships,omitempty"`
-	// TODO: REMOVE
-	CreatedAt         time.Time `json:"created_at,omitempty"`
-	LastModified      time.Time `json:"last_modified,omitempty"`
-	LinkedGPOs        []string  `json:"linked_gpos,omitempty"`
-	DefaultContainers []string  `json:"default_containers,omitempty"`
+	UID         string   `json:"uid,omitempty"`
+	Name        string   `json:"domain.name,omitempty"`
+	Description string   `json:"domain.description,omitempty"`
+	DType       []string `json:"dgraph.type,omitempty"`
 
-	// History related
-	DiscoveredAt time.Time `json:"discovered_at,omitempty"`
-	DiscoveredBy string    `json:"discovered_by,omitempty"`
-	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
-	LastSeenBy   string    `json:"last_seen_by,omitempty"`
+	// AD related
+	DNSName               string          `json:"domain.dns_name,omitempty"`
+	NetBiosName           string          `json:"domain.netbios_name,omitempty"`
+	DomainGUID            string          `json:"domain.domain_guid,omitempty"`
+	DomainSID             string          `json:"domnain.domain_sid,omitempty"`
+	DomainFunctionalLevel string          `json:"domain.functional_level,omitempty"`
+	ForestFunctionalLevel string          `json:"domain.forest_functional_level,omitempty"`
+	FSMORoleOwners        []string        `json:"domain.fsmo_role_owners,omitempty"`
+	LinkedGPOs            []string        `json:"domain.linked_gpos,omitempty"`
+	DefaultContainers     []string        `json:"domain.default_containers,omitempty"`
+	ContainsDirNodes      []*utils.UIDRef `json:"domain.contains_dir_nodes,omitempty"`
+	HasPrincipals         []*utils.UIDRef `json:"domain.has_principals,omitempty"`
+	HasTrust              []*utils.UIDRef `json:"domain.has_trust,omitempty"`
+	HasACL                []*utils.UIDRef `json:"domain.has_acl,omitempty"`
+	HasGPOLink            []*utils.UIDRef `json:"domain.has_gpo_link,omitempty"`
+	HasSecurityPolicy     *utils.UIDRef   `json:"domain.has_security_policy,omitempty"`
+
+	RedPathsMetadata model.RedPathsMetadata `json:"-"`
 }
 
-type SecurityPolicy struct {
-	MinPasswordLength int `json:"min_pwd_length,omitempty"`
-	PasswordHistory   int `json:"pwd_history_length,omitempty"`
-	LockoutThreshold  int `json:"lockout_threshold,omitempty"`
-	LockoutDuration   int `json:"lockout_duration,omitempty"`
+func (d *Domain) UnmarshalJSON(data []byte) error {
+	type Alias Domain
+	aux := (*Alias)(d)
+	return model.UnmarshalWithMetadata(data, aux, &d.RedPathsMetadata)
 }
 
-type Trust struct {
-	TrustedDomain string `json:"trusted_domain,omitempty"`
-	Direction     string `json:"direction,omitempty"`  // inbound, outbound, bidirectional
-	TrustType     string `json:"trust_type,omitempty"` // parent-child, cross-forest, external
-	IsTransitive  bool   `json:"is_transitive,omitempty"`
+func (d Domain) MarshalJSON() ([]byte, error) {
+	type Alias Domain
+	return model.MarshalWithMetadata(Alias(d), d.RedPathsMetadata)
 }
 
 func (d *Domain) EntityUID() string {

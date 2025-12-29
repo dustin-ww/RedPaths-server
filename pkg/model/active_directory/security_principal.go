@@ -1,4 +1,4 @@
-package model
+package active_directory
 
 type SecurityPrincipal interface {
 	GetID() string
@@ -15,14 +15,6 @@ const (
 	PrincipalComputer       PrincipalType = "Computer"
 	PrincipalServiceAccount PrincipalType = "ServiceAccount"
 )
-
-type BasePrincipal struct {
-	ID          string
-	Name        string
-	SID         string
-	Description string
-	DomainID    string
-}
 
 func (b BasePrincipal) GetID() string   { return b.ID }
 func (b BasePrincipal) GetSID() string  { return b.SID }

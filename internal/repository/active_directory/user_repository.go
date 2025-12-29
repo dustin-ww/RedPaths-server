@@ -2,7 +2,7 @@ package active_directory
 
 import (
 	"RedPaths-server/internal/repository/dgraphutil"
-	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/active_directory"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,24 +13,24 @@ import (
 )
 
 type UserRepository interface {
-	Get(ctx context.Context, tx *dgo.Txn, userUID string) (*model.ADUser, error)
-	Create(ctx context.Context, tx *dgo.Txn, incomingUser *model.ADUser, actor string) (*model.ADUser, error)
+	Get(ctx context.Context, tx *dgo.Txn, userUID string) (*active_directory.User, error)
+	Create(ctx context.Context, tx *dgo.Txn, incomingUser *active_directory.User, actor string) (*active_directory.User, error)
 	AddToDomain(ctx context.Context, tx *dgo.Txn, userID string, domainUID string) error
 	UserExistsByName(ctx context.Context, tx *dgo.Txn, projectUID string, name string) (bool, error)
 
 	// Users WITH KNOWN/DISCOVERED DOMAIN
-	GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.ADUser, error)
-	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.ADUser, error)
+	GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*active_directory.User, error)
+	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.User, error)
 
-	UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.ADUser, error)
-	GetByProjectIncludingDomains(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.ADUser, error)
+	UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*active_directory.User, error)
+	GetByProjectIncludingDomains(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.User, error)
 }
 
 type DraphUserRepository struct {
 	DB *dgo.Dgraph
 }
 
-func (r *DraphUserRepository) Get(ctx context.Context, tx *dgo.Txn, userUID string) (*model.ADUser, error) {
+func (r *DraphUserRepository) Get(ctx context.Context, tx *dgo.Txn, userUID string) (*active_directory.User, error) {
 	panic("implement me")
 }
 
@@ -47,7 +47,7 @@ func (r *DraphUserRepository) UserExistsByName(ctx context.Context, tx *dgo.Txn,
 	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "User", "Name", name)
 }
 
-func (r *DraphUserRepository) Create(ctx context.Context, tx *dgo.Txn, incomingUser *model.ADUser, actor string) (*model.ADUser, error) {
+func (r *DraphUserRepository) Create(ctx context.Context, tx *dgo.Txn, incomingUser *active_directory.User, actor string) (*active_directory.User, error) {
 	incomingUser.DiscoveredAt = time.Now().UTC()
 	incomingUser.DiscoveredBy = actor
 	incomingUser.LastSeenAt = time.Now().UTC()
@@ -59,14 +59,14 @@ func (r *DraphUserRepository) Create(ctx context.Context, tx *dgo.Txn, incomingU
 	return createdUser, nil
 }
 
-func (r *DraphUserRepository) GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.ADUser, error) {
+func (r *DraphUserRepository) GetByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*active_directory.User, error) {
 	fields := []string{
 		"uid",
 		"name",
 		"dgraph.type",
 	}
 
-	users, err := dgraphutil.GetEntitiesByRelation[*model.ADUser](
+	users, err := dgraphutil.GetEntitiesByRelation[*active_directory.User](
 		ctx,
 		tx,
 		"User",
@@ -84,14 +84,14 @@ func (r *DraphUserRepository) GetByDomainUID(ctx context.Context, tx *dgo.Txn, d
 }
 
 // TODO: Fix Relation
-func (r *DraphUserRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.ADUser, error) {
+func (r *DraphUserRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.User, error) {
 	fields := []string{
 		"uid",
 		"name",
 		"dgraph.type",
 	}
 
-	users, err := dgraphutil.GetEntitiesByRelation[*model.ADUser](
+	users, err := dgraphutil.GetEntitiesByRelation[*active_directory.User](
 		ctx,
 		tx,
 		"User",
@@ -112,7 +112,7 @@ func (r *DraphUserRepository) GetByProjectIncludingDomains(
 	ctx context.Context,
 	tx *dgo.Txn,
 	projectUID string,
-) ([]*model.ADUser, error) {
+) ([]*active_directory.User, error) {
 
 	if tx == nil {
 		return nil, fmt.Errorf("transaction cannot be nil")
@@ -204,12 +204,12 @@ func (r *DraphUserRepository) GetByProjectIncludingDomains(
 	// --- Response Mapping ---
 
 	type domainWrapper struct {
-		HasUser []*model.ADUser `json:"has_user"`
+		HasUser []*active_directory.User `json:"has_user"`
 	}
 
 	type projectWrapper struct {
-		HasUser   []*model.ADUser `json:"has_user"`
-		HasDomain []domainWrapper `json:"has_domain"`
+		HasUser   []*active_directory.User `json:"has_user"`
+		HasDomain []domainWrapper          `json:"has_domain"`
 	}
 
 	var result struct {
@@ -222,7 +222,7 @@ func (r *DraphUserRepository) GetByProjectIncludingDomains(
 
 	// --- Deduplicate Users by UID ---
 
-	userMap := make(map[string]*model.ADUser)
+	userMap := make(map[string]*active_directory.User)
 
 	for _, project := range result.Project {
 
@@ -243,7 +243,7 @@ func (r *DraphUserRepository) GetByProjectIncludingDomains(
 		}
 	}
 
-	users := make([]*model.ADUser, 0, len(userMap))
+	users := make([]*active_directory.User, 0, len(userMap))
 	for _, user := range userMap {
 		users = append(users, user)
 	}
@@ -251,6 +251,6 @@ func (r *DraphUserRepository) GetByProjectIncludingDomains(
 	return users, nil
 }
 
-func (r *DraphUserRepository) UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.ADUser, error) {
+func (r *DraphUserRepository) UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*active_directory.User, error) {
 	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }

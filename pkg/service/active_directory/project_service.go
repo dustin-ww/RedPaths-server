@@ -7,6 +7,7 @@ import (
 	"RedPaths-server/internal/repository/changes"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
+	active_directory2 "RedPaths-server/pkg/model/active_directory"
 	"context"
 	"encoding/json"
 	"errors"
@@ -47,7 +48,7 @@ func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectSer
 	}, nil
 }
 
-func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *model.Domain, actor string) (string, error) {
+func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *active_directory2.Domain, actor string) (string, error) {
 	var domainUID string
 
 	log.Printf("[AddDomain] incomingDomain.Name=%s, projectUID=%s", incomingDomain.Name, projectUID)
@@ -81,7 +82,7 @@ func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incom
 	return domainUID, err
 }
 
-func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*model.Domain, error) {
+func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*active_directory2.Domain, error) {
 	domain, err := s.domainRepo.GetByNameInProject(ctx, tx, projectUID, domainName)
 	if err != nil {
 		if errors.Is(err, rperror.ErrNotFound) {
@@ -93,8 +94,8 @@ func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Tx
 	return domain, nil
 }
 
-func (s *ProjectService) GetDomainInProjectByUID(ctx context.Context, projectUID, domainUID string) (*model.Domain, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.Domain, error) {
+func (s *ProjectService) GetDomainInProjectByUID(ctx context.Context, projectUID, domainUID string) (*active_directory2.Domain, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*active_directory2.Domain, error) {
 		domain, err := s.domainRepo.GetByUIDInProject(ctx, tx, projectUID, domainUID)
 		if err != nil {
 			if errors.Is(err, rperror.ErrNotFound) {
@@ -109,7 +110,7 @@ func (s *ProjectService) GetDomainInProjectByUID(ctx context.Context, projectUID
 func (s *ProjectService) createAndLinkDomain(
 	ctx context.Context,
 	tx *dgo.Txn,
-	domain *model.Domain,
+	domain *active_directory2.Domain,
 	projectUID string,
 	domainUIDOut *string,
 	actor string,
@@ -132,8 +133,8 @@ func (s *ProjectService) createAndLinkDomain(
 	return nil
 }
 
-func (s *ProjectService) GetProjectDomains(ctx context.Context, projectUID string) ([]*model.Domain, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Domain, error) {
+func (s *ProjectService) GetProjectDomains(ctx context.Context, projectUID string) ([]*active_directory2.Domain, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*active_directory2.Domain, error) {
 		return s.domainRepo.GetAllByProjectUID(ctx, tx, projectUID)
 	})
 }
@@ -287,15 +288,15 @@ func (s *ProjectService) GetHostByProject(ctx context.Context, projectUID, hostU
 	})
 }
 
-func (s *ProjectService) GetAllUserInProject(ctx context.Context, projectUID string) ([]*model.ADUser, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.ADUser, error) {
+func (s *ProjectService) GetAllUserInProject(ctx context.Context, projectUID string) ([]*active_directory2.User, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*active_directory2.User, error) {
 		return s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 
 	})
 }
 
-func (s *ProjectService) GetUserInProject(ctx context.Context, projectUID, userUID string) (*model.ADUser, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.ADUser, error) {
+func (s *ProjectService) GetUserInProject(ctx context.Context, projectUID, userUID string) (*active_directory2.User, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*active_directory2.User, error) {
 		users, err := s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 
 		if err != nil {

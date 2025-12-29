@@ -52,7 +52,7 @@ domain.forest_functional_level: string .
 domain.fsmo_role_owners: [string] .
 domain.linked_gpos: [string] .
 domain.default_containers: [string] .
-domain.contains: [uid] @reverse .
+domain.contains_dir_nodes: [uid] @reverse .
 domain.has_principals: [uid] @reverse .
 domain.has_trust: [uid] @reverse .
 domain.has_acl: uid @reverse .
@@ -71,7 +71,7 @@ type Domain {
   domain.fsmo_role_owners
   domain.linked_gpos
   domain.default_containers
-  domain.contains
+  domain.contains_dir_nodes
   domain.has_principals
   domain.has_trust
   domain.has_acl
@@ -89,7 +89,7 @@ type Domain {
 trust.trust_type: string @index(exact) .
 trust.direction: string @index(exact) .
 trust.is_transitive: bool @index(bool) .
-trust.trusted_domain: string @index(exact) .
+trust.trusted_domain: uid @reverse .
 
 type Trust {
   trust.trust_type
@@ -160,6 +160,8 @@ security_principal.has_capability: [uid] @reverse .
 security_principal.owns: [uid] @reverse .
 security_principal.has_acl: uid @reverse .
 
+user.name: string .
+user.description: string .
 user.sam_account_name: string @index(exact) .
 user.upn: string @index(exact) .
 user.is_disabled: bool @index(bool) .
@@ -171,6 +173,12 @@ user.bad_pwd_count: int .
 user.allowed_to_delegate: bool @index(bool) .
 user.has_spn: bool @index(bool) .
 user.has_session: [uid] @reverse .
+user.kerberoastable: bool .
+user.asrep_roastable: bool .
+user.risk_score: int .
+user.risk_reasons: [string] .
+user.is_local_admin: bool .
+user.is_domain_admin: bool .
 
 type User {
   security_principal.name
@@ -179,6 +187,8 @@ type User {
   security_principal.has_capability
   security_principal.owns
   security_principal.has_acl
+  user.name
+  user.description
   user.sam_account_name
   user.upn
   user.is_disabled
@@ -191,6 +201,12 @@ type User {
   user.has_spn
   user.has_session
   group.member_of
+  user.kerberoastable
+  user.asrep_roastable
+  user.risk_score
+  user.risk_reasons
+  user.is_local_admin
+  user.is_domain_admin
   created_at
   modified_at
   validated_at
@@ -200,6 +216,8 @@ type User {
   dgraph.type
 }
 
+group.name: string .
+group.description: string .
 group.group_scope: string @index(exact) .
 group.group_type: string @index(exact) .
 group.is_privileged: bool @index(bool) .
@@ -220,6 +238,8 @@ type Group {
   security_principal.has_capability
   security_principal.owns
   security_principal.has_acl
+  group.name
+  group.description
   group.group_scope
   group.group_type
   group.is_privileged

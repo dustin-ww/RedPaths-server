@@ -1,12 +1,18 @@
 package active_directory
 
-import "RedPaths-server/pkg/model"
+import (
+	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/utils"
+)
 
 type ActiveDirectory struct {
-	UID                   string                 `json:"uid,omitempty"`
-	ForestName            string                 `json:"forest_name,omitempty"`
-	ForestFunctionalLevel string                 `json:"forest_functional_level,omitempty"`
-	RedPathsMetadata      model.RedPathsMetadata `json:"rp_metadata,omitempty"`
+	UID                   string          `json:"uid,omitempty"`
+	DType                 []string        `json:"dgraph.type,omitempty"`
+	ForestName            string          `json:"active_directory.forest_name,omitempty"`
+	ForestFunctionalLevel string          `json:"active_directory.forest_functional_level,omitempty"`
+	HasDomain             []*utils.UIDRef `json:"active_directory.has_domain,omitempty"`
+
+	RedPathsMetadata model.RedPathsMetadata `json:"-"`
 }
 
 func (ad *ActiveDirectory) UnmarshalJSON(data []byte) error {

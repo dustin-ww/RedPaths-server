@@ -2,7 +2,7 @@ package handlers
 
 import (
 	restcontext "RedPaths-server/internal/rest/context"
-	"RedPaths-server/pkg/model"
+	active_directory2 "RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/service/active_directory"
 	"log"
 	"net/http"
@@ -36,7 +36,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user := &model.ADUser{
+	user := &active_directory2.User{
 		Name: request.Name,
 	}
 

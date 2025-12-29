@@ -8,6 +8,7 @@ import (
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/interfaces/module"
 	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/events"
 	"RedPaths-server/pkg/model/redpaths/input"
 	"RedPaths-server/pkg/model/rpsdk"
@@ -324,7 +325,7 @@ func (n *NetworkExplorer) tryToBuildDomain(nmapResult scan.NmapScanResult, ip st
 		return "", fmt.Errorf("could not determine domain from nmap results")
 	}
 
-	domainBuilder := model.NewDomainBuilder()
+	domainBuilder := active_directory.NewDomainBuilder()
 	domainBuilder.WithName(domain)
 	builtDomain := domainBuilder.Build()
 

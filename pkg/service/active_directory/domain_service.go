@@ -5,6 +5,7 @@ import (
 	"RedPaths-server/internal/repository/active_directory"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
+	active_directory2 "RedPaths-server/pkg/model/active_directory"
 	"context"
 	"fmt"
 	"log"
@@ -78,7 +79,7 @@ func (s *DomainService) GetDomainHosts(ctx context.Context, domainUID string) ([
 	})
 }
 
-func (s *DomainService) UpdateDomain(ctx context.Context, uid, actor string, fields map[string]interface{}) (*model.Domain, error) {
+func (s *DomainService) UpdateDomain(ctx context.Context, uid, actor string, fields map[string]interface{}) (*active_directory2.Domain, error) {
 	if uid == "" {
 		return nil, utils.ErrUIDRequired
 	}
@@ -95,7 +96,7 @@ func (s *DomainService) UpdateDomain(ctx context.Context, uid, actor string, fie
 		}
 	}*/
 
-	return db.ExecuteInTransactionWithResult[*model.Domain](ctx, s.db, func(tx *dgo.Txn) (*model.Domain, error) {
+	return db.ExecuteInTransactionWithResult[*active_directory2.Domain](ctx, s.db, func(tx *dgo.Txn) (*active_directory2.Domain, error) {
 		return s.domainRepo.UpdateDomain(ctx, tx, uid, actor, fields)
 	})
 }

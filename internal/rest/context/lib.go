@@ -2,6 +2,7 @@ package context
 
 import (
 	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/redpaths"
 
 	"github.com/gin-gonic/gin"
@@ -11,8 +12,8 @@ func Project(c *gin.Context) *model.Project {
 	return c.MustGet("project").(*model.Project)
 }
 
-func Domain(c *gin.Context) *model.Domain {
-	return c.MustGet("domain").(*model.Domain)
+func Domain(c *gin.Context) *active_directory.Domain {
+	return c.MustGet("domain").(*active_directory.Domain)
 }
 
 func Module(c *gin.Context) *redpaths.Module {
@@ -27,6 +28,6 @@ func Service(c *gin.Context) *model.Service {
 	return c.MustGet("service").(*model.Service)
 }
 
-func User(c *gin.Context) *model.ADUser {
-	return c.MustGet("user").(*model.ADUser)
+func User(c *gin.Context) *active_directory.User {
+	return c.MustGet("user").(*active_directory.User)
 }
