@@ -58,11 +58,11 @@ func (r *DgraphActiveDirectoryRepository) Delete(ctx context.Context, tx *dgo.Tx
 }
 
 // AddDomain connects a domain to a project
-func (r *DgraphActiveDirectoryRepository) AddDomain(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) error {
+func (r *DgraphActiveDirectoryRepository) AddDomain(ctx context.Context, tx *dgo.Txn, activeDirectoryUID, domainUID string) error {
 	relationName := "has_domain"
-	err := dgraphutil.AddRelation(ctx, tx, projectUID, domainUID, relationName)
+	err := dgraphutil.AddRelation(ctx, tx, activeDirectoryUID, domainUID, relationName)
 	if err != nil {
-		return fmt.Errorf("error while linking domain %s to project %s with relation %s", domainUID, projectUID, relationName)
+		return fmt.Errorf("error while linking domain %s to active directory forest %s with relation %s", domainUID, activeDirectoryUID, relationName)
 	}
 	return nil
 }

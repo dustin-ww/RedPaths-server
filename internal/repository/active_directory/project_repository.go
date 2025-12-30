@@ -27,7 +27,6 @@ type ProjectRepository interface {
 	// Relations
 	AddActiveDirectory(ctx context.Context, tx *dgo.Txn, projectUID, activeDirectoryUID string) error
 
-	AddDomain(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) error
 	AddTarget(ctx context.Context, tx *dgo.Txn, projectUID, targetUID string) error
 	AddHostWithUnknownDomain(ctx context.Context, tx *dgo.Txn, projectUID, hostUID string) error
 	AddUser(ctx context.Context, tx *dgo.Txn, projectUID, userUID string) error
@@ -43,12 +42,11 @@ func NewDgraphProjectRepository(db *dgo.Dgraph) *DgraphProjectRepository {
 	return &DgraphProjectRepository{DB: db}
 }
 
-// AddDomain connects a domain to a project
 func (r *DgraphProjectRepository) AddActiveDirectory(ctx context.Context, tx *dgo.Txn, projectUID, activeDirectoryUID string) error {
 	relationName := "has_ad"
 	err := dgraphutil.AddRelation(ctx, tx, projectUID, activeDirectoryUID, relationName)
 	if err != nil {
-		return fmt.Errorf("error while linking domain %s to project %s with relation %s", domainUID, projectUID, relationName)
+		return fmt.Errorf("error while linking active directory forest %s to project %s with relation %s", activeDirectoryUID, projectUID, relationName)
 	}
 	return nil
 }
@@ -80,7 +78,6 @@ func (r *DgraphProjectRepository) Create(ctx context.Context, tx *dgo.Txn, name 
 
 // Get retrieves a project by UID
 func (r *DgraphProjectRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Project, error) {
-	fmt.Println("REPO")
 	query := `
         query Project($uid: string) {
             project(func: uid($uid)) {
@@ -90,7 +87,7 @@ func (r *DgraphProjectRepository) Get(ctx context.Context, tx *dgo.Txn, uid stri
                 created_at
                 modified_at
                 description
-                has_domain {
+                has_ad {
                     uid
                 }
                 has_target {
@@ -198,16 +195,6 @@ func (r *DgraphProjectRepository) Delete(ctx context.Context, tx *dgo.Txn, uid s
 	}
 
 	return dgraphutil.DeleteEntityCascadeByTypeMap(ctx, tx, uid, projectMap)
-}
-
-// AddDomain connects a domain to a project
-func (r *DgraphProjectRepository) AddDomain(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) error {
-	relationName := "has_domain"
-	err := dgraphutil.AddRelation(ctx, tx, projectUID, domainUID, relationName)
-	if err != nil {
-		return fmt.Errorf("error while linking domain %s to project %s with relation %s", domainUID, projectUID, relationName)
-	}
-	return nil
 }
 
 // AddTarget connects a target to a project
