@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 )
@@ -48,10 +47,7 @@ func (r *DraphUserRepository) UserExistsByName(ctx context.Context, tx *dgo.Txn,
 }
 
 func (r *DraphUserRepository) Create(ctx context.Context, tx *dgo.Txn, incomingUser *active_directory.User, actor string) (*active_directory.User, error) {
-	incomingUser.DiscoveredAt = time.Now().UTC()
-	incomingUser.DiscoveredBy = actor
-	incomingUser.LastSeenAt = time.Now().UTC()
-	incomingUser.LastSeenBy = actor
+
 	createdUser, err := dgraphutil.CreateEntity(ctx, tx, "User", incomingUser)
 	if err != nil {
 		return nil, err

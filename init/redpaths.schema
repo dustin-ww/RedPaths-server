@@ -11,14 +11,16 @@ project.name: string @index(exact, term) .
 project.tags: [string] .
 project.description: string .
 project.has_ad: [uid] @reverse .
-project.has_host: [uid] @reverse .
+project.has_unknown_domain_host: [uid] @reverse .
+project.has_target: [uid] @reverse .
 
 type Project {
   project.name
   project.tags
   project.description
   project.has_ad
-  project.has_host
+  project.has_unknown_domain_host
+  project.has_target
   created_at
   modified_at
   dgraph.type
@@ -160,8 +162,6 @@ security_principal.has_capability: [uid] @reverse .
 security_principal.owns: [uid] @reverse .
 security_principal.has_acl: uid @reverse .
 
-user.name: string .
-user.description: string .
 user.sam_account_name: string @index(exact) .
 user.upn: string @index(exact) .
 user.is_disabled: bool @index(bool) .
@@ -187,8 +187,6 @@ type User {
   security_principal.has_capability
   security_principal.owns
   security_principal.has_acl
-  user.name
-  user.description
   user.sam_account_name
   user.upn
   user.is_disabled
@@ -216,8 +214,6 @@ type User {
   dgraph.type
 }
 
-group.name: string .
-group.description: string .
 group.group_scope: string @index(exact) .
 group.group_type: string @index(exact) .
 group.is_privileged: bool @index(bool) .
@@ -238,8 +234,6 @@ type Group {
   security_principal.has_capability
   security_principal.owns
   security_principal.has_acl
-  group.name
-  group.description
   group.group_scope
   group.group_type
   group.is_privileged
@@ -313,16 +307,27 @@ type Computer {
   dgraph.type
 }
 
+host.name: string .
 host.hostname: string @index(exact, term) .
-host.ip: string @index(exact) .
 host.description: string .
+host.ip: string .
+host.is_domain_controller: bool .
+host.distinguished_name: string .
+host.dns_host_name: string .
+host.operating_system: string .
+host.operating_system_version: string .
 host.runs: [uid] @reverse .
 host.has_acl: uid @reverse .
 
 type Host {
+  host.name
   host.hostname
   host.ip
-  host.description
+  host.is_domain_controller
+  host.distinguished_name
+  host.dns_host_name
+  host.operating_system
+  host.operating_system_version
   host.runs
   host.has_acl
   created_at
@@ -335,6 +340,7 @@ type Host {
 }
 
 service.name: string @index(exact, term) .
+service.description: string .
 service.port: string @index(exact) .
 service.description: string .
 
@@ -644,6 +650,32 @@ type CompromiseRecord {
   compromise_record.parent_compromise
   dgraph.type
 }
+
+assertion.predicate: string @index(term) .
+assertion.method: string @index(term) .
+assertion.source: string @index(term) .
+assertion.confidence: float .
+assertion.status: string @index(term) .
+assertion.timestamp: datetime @index(year) .
+assertion.note: string .
+assertion.high_value_marked: bool .
+
+assertion.subject: uid @reverse .
+assertion.object: uid @reverse .
+
+type Assertion {
+  assertion.note
+  assertion.predicate
+  assertion.method
+  assertion.source
+  assertion.confidence
+  assertion.status
+  assertion.timestamp
+  assertion.subject
+  assertion.object
+  assertion.high_value_marked
+}
+
 
 target.ip: string @index(exact) .
 target.cidr: int .

@@ -232,7 +232,7 @@ func (r *PostgresRedPathsLogRepository) GetLogsByProjectWithOptions(
 		return nil, fmt.Errorf("fetching logs failed: %w", err)
 	}
 
-	// Create Response
+	// DeprecatedCreate Response
 	totalPages := int((totalCount + int64(opts.PageSize) - 1) / int64(opts.PageSize))
 
 	return &pagination.PaginatedLogResult{

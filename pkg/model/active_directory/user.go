@@ -1,20 +1,17 @@
 package active_directory
 
 import (
-	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/utils"
 	"time"
 )
 
 type User struct {
-	BasePrincipal
 
-	UID         string   `json:"uid,omitempty"`
-	Name        string   `json:"user.name,omitempty"`
-	Description string   `json:"user.description,omitempty"`
-	DType       []string `json:"dgraph.type,omitempty"`
+	// Internal & Interface
+	core.BasePrincipal
 
-	// AD-related
+	// Specific
 	SAMAccountName    string          `json:"user.sam_account_name,omitempty"`
 	UPN               string          `json:"user.upn,omitempty"`
 	IsDisabled        bool            `json:"user.is_disabled,omitempty"`
@@ -51,20 +48,21 @@ type User struct {
 	// Usage
 	//Workstations []string `json:"workstations,omitempty"`
 
-	RedPathsMetadata model.RedPathsMetadata `json:"-"`
+	// Meta
+	RedPathsMetadata core.RedPathsMetadata `json:"-"`
 }
 
-func (u User) PrincipalType() PrincipalType {
+func (u *User) PrincipalType() PrincipalType {
 	return PrincipalUser
 }
 
 func (u *User) UnmarshalJSON(data []byte) error {
 	type Alias User
 	aux := (*Alias)(u)
-	return model.UnmarshalWithMetadata(data, aux, &u.RedPathsMetadata)
+	return core.UnmarshalWithMetadata(data, aux, &u.RedPathsMetadata)
 }
 
 func (u User) MarshalJSON() ([]byte, error) {
 	type Alias User
-	return model.MarshalWithMetadata(Alias(u), u.RedPathsMetadata)
+	return core.MarshalWithMetadata(Alias(u), u.RedPathsMetadata)
 }

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 )
@@ -142,12 +141,8 @@ func (r *DraphHostRepository) GetByProjectIncludingDomains(ctx context.Context,
 func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *model.Host, actor string) (string, error) {
 
 	hostToCreate := &model.Host{
-		IP:           host.IP,
-		Name:         host.Name,
-		DiscoveredAt: time.Now().UTC(),
-		LastSeenAt:   time.Now().UTC(),
-		DiscoveredBy: actor,
-		LastSeenBy:   actor,
+		IP:   host.IP,
+		Name: host.Name,
 	}
 	return dgraphutil.OldCreateEntity(ctx, tx, "Host", hostToCreate)
 }

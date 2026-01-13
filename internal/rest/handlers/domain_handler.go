@@ -4,10 +4,11 @@ import (
 	restcontext "RedPaths-server/internal/rest/context"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/service/active_directory"
-	"github.com/gin-gonic/gin"
 
 	"log"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 type DomainHandler struct {
@@ -62,6 +63,28 @@ func (h *DomainHandler) GetHosts(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, hosts)
+}
+
+func (h *DomainHandler) GetDirectoryNodes(c *gin.Context) {
+	domain := restcontext.Domain(c)
+
+	directoryNodes, err := h.domainService.GetDomainDirectoryNodes(
+		c.Request.Context(),
+		domain.UID)
+
+	if err != nil {
+		errReturn := gin.H{
+			"error":   "Failed to retrieve directory nodes for given domain uid",
+			"details": err.Error(),
+		}
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, errReturn)
+	}
+	c.JSON(http.StatusOK, directoryNodes)
+}
+
+func (h *DomainHandler) AddDirectoryNode(c *gin.Context) {
+	panic("implement me")
 }
 
 func (h *DomainHandler) UpdateDomain(c *gin.Context) {

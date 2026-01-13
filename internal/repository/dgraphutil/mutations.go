@@ -1,7 +1,7 @@
 package dgraphutil
 
 import (
-	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/core"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -129,7 +129,7 @@ func AddRelation(ctx context.Context, tx *dgo.Txn, sourceUID, targetUID, relatio
 	return executeMutation(ctx, tx, update)
 }
 
-func InitCreateMetadata(meta *model.RedPathsMetadata, actor string) {
+func InitCreateMetadata(meta *core.RedPathsMetadata, actor string) {
 	now := time.Now().UTC()
 
 	meta.CreatedAt = now

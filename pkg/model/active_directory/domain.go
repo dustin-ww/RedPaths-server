@@ -1,49 +1,51 @@
 package active_directory
 
 import (
-	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/redpaths/history"
 	"RedPaths-server/pkg/model/utils"
 	"log"
-	"time"
 )
 
 type Domain struct {
 	// Internal
-	UID         string   `json:"uid,omitempty"`
-	Name        string   `json:"domain.name,omitempty"`
-	Description string   `json:"domain.description,omitempty"`
-	DType       []string `json:"dgraph.type,omitempty"`
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
 
-	// AD related
-	DNSName               string          `json:"domain.dns_name,omitempty"`
-	NetBiosName           string          `json:"domain.netbios_name,omitempty"`
-	DomainGUID            string          `json:"domain.domain_guid,omitempty"`
-	DomainSID             string          `json:"domnain.domain_sid,omitempty"`
-	DomainFunctionalLevel string          `json:"domain.functional_level,omitempty"`
-	ForestFunctionalLevel string          `json:"domain.forest_functional_level,omitempty"`
-	FSMORoleOwners        []string        `json:"domain.fsmo_role_owners,omitempty"`
-	LinkedGPOs            []string        `json:"domain.linked_gpos,omitempty"`
-	DefaultContainers     []string        `json:"domain.default_containers,omitempty"`
-	ContainsDirNodes      []*utils.UIDRef `json:"domain.contains_dir_nodes,omitempty"`
-	HasPrincipals         []*utils.UIDRef `json:"domain.has_principals,omitempty"`
-	HasTrust              []*utils.UIDRef `json:"domain.has_trust,omitempty"`
-	HasACL                []*utils.UIDRef `json:"domain.has_acl,omitempty"`
-	HasGPOLink            []*utils.UIDRef `json:"domain.has_gpo_link,omitempty"`
-	HasSecurityPolicy     *utils.UIDRef   `json:"domain.has_security_policy,omitempty"`
+	// Specific
+	Name                  string   `json:"domain.name,omitempty"`
+	Description           string   `json:"domain.description,omitempty"`
+	DNSName               string   `json:"domain.dns_name,omitempty"`
+	NetBiosName           string   `json:"domain.netbios_name,omitempty"`
+	DomainGUID            string   `json:"domain.domain_guid,omitempty"`
+	DomainSID             string   `json:"domnain.domain_sid,omitempty"`
+	DomainFunctionalLevel string   `json:"domain.functional_level,omitempty"`
+	ForestFunctionalLevel string   `json:"domain.forest_functional_level,omitempty"`
+	FSMORoleOwners        []string `json:"domain.fsmo_role_owners,omitempty"`
+	LinkedGPOs            []string `json:"domain.linked_gpos,omitempty"`
+	DefaultContainers     []string `json:"domain.default_containers,omitempty"`
 
-	RedPathsMetadata model.RedPathsMetadata `json:"-"`
+	// Relations
+	ContainsDirNodes  []*utils.UIDRef `json:"domain.contains_dir_nodes,omitempty"`
+	HasPrincipals     []*utils.UIDRef `json:"domain.has_principals,omitempty"`
+	HasTrust          []*utils.UIDRef `json:"domain.has_trust,omitempty"`
+	HasACL            []*utils.UIDRef `json:"domain.has_acl,omitempty"`
+	HasGPOLink        []*utils.UIDRef `json:"domain.has_gpo_link,omitempty"`
+	HasSecurityPolicy *utils.UIDRef   `json:"domain.has_security_policy,omitempty"`
+
+	// Meta
+	RedPathsMetadata core.RedPathsMetadata `json:"-"`
 }
 
 func (d *Domain) UnmarshalJSON(data []byte) error {
 	type Alias Domain
 	aux := (*Alias)(d)
-	return model.UnmarshalWithMetadata(data, aux, &d.RedPathsMetadata)
+	return core.UnmarshalWithMetadata(data, aux, &d.RedPathsMetadata)
 }
 
 func (d Domain) MarshalJSON() ([]byte, error) {
 	type Alias Domain
-	return model.MarshalWithMetadata(Alias(d), d.RedPathsMetadata)
+	return core.MarshalWithMetadata(Alias(d), d.RedPathsMetadata)
 }
 
 func (d *Domain) EntityUID() string {
@@ -89,9 +91,7 @@ type DomainBuilder struct {
 func NewDomainBuilder() *DomainBuilder {
 	return &DomainBuilder{
 		domain: Domain{
-			DType:        []string{"Domain"},
-			CreatedAt:    time.Now(),
-			LastModified: time.Now(),
+			DType: []string{"Domain"},
 		},
 	}
 }
@@ -103,21 +103,6 @@ func (b *DomainBuilder) WithUID(uid string) *DomainBuilder {
 
 func (b *DomainBuilder) WithName(name string) *DomainBuilder {
 	b.domain.Name = name
-	return b
-}
-
-func (b *DomainBuilder) WithProject(project utils.UIDRef) *DomainBuilder {
-	b.domain.BelongsToProject = project
-	return b
-}
-
-func (b *DomainBuilder) AddHost(host utils.UIDRef) *DomainBuilder {
-	b.domain.HasHost = append(b.domain.HasHost, host)
-	return b
-}
-
-func (b *DomainBuilder) AddUser(user utils.UIDRef) *DomainBuilder {
-	b.domain.HasUser = append(b.domain.HasUser, user)
 	return b
 }
 
@@ -146,16 +131,6 @@ func (b *DomainBuilder) WithDomainSID(sid string) *DomainBuilder {
 	return b
 }
 
-func (b *DomainBuilder) WithDomainFunctionLevel(level string) *DomainBuilder {
-	b.domain.DomainFunctionLevel = level
-	return b
-}
-
-func (b *DomainBuilder) WithForestFunctionLevel(level string) *DomainBuilder {
-	b.domain.ForestFunctionLevel = level
-	return b
-}
-
 func (b *DomainBuilder) WithFSMORoleOwners(owners []string) *DomainBuilder {
 	b.domain.FSMORoleOwners = owners
 	return b
@@ -163,26 +138,6 @@ func (b *DomainBuilder) WithFSMORoleOwners(owners []string) *DomainBuilder {
 
 func (b *DomainBuilder) AddFSMORoleOwner(owner string) *DomainBuilder {
 	b.domain.FSMORoleOwners = append(b.domain.FSMORoleOwners, owner)
-	return b
-}
-
-func (b *DomainBuilder) WithSecurityPolicies(policies utils.UIDRef) *DomainBuilder {
-	b.domain.SecurityPolicies = policies
-	return b
-}
-
-func (b *DomainBuilder) AddTrustRelationship(trust utils.UIDRef) *DomainBuilder {
-	b.domain.TrustRelationships = append(b.domain.TrustRelationships, trust)
-	return b
-}
-
-func (b *DomainBuilder) WithCreated(created time.Time) *DomainBuilder {
-	b.domain.CreatedAt = created
-	return b
-}
-
-func (b *DomainBuilder) WithLastModified(lastModified time.Time) *DomainBuilder {
-	b.domain.LastModified = lastModified
 	return b
 }
 
@@ -218,16 +173,6 @@ func NewSecurityPolicyBuilder() *SecurityPolicyBuilder {
 	return &SecurityPolicyBuilder{}
 }
 
-func (b *SecurityPolicyBuilder) WithMinPasswordLength(length int) *SecurityPolicyBuilder {
-	b.policy.MinPasswordLength = length
-	return b
-}
-
-func (b *SecurityPolicyBuilder) WithPasswordHistory(length int) *SecurityPolicyBuilder {
-	b.policy.PasswordHistory = length
-	return b
-}
-
 func (b *SecurityPolicyBuilder) WithLockoutThreshold(threshold int) *SecurityPolicyBuilder {
 	b.policy.LockoutThreshold = threshold
 	return b
@@ -248,11 +193,6 @@ type TrustBuilder struct {
 
 func NewTrustBuilder() *TrustBuilder {
 	return &TrustBuilder{}
-}
-
-func (b *TrustBuilder) WithTrustedDomain(domain string) *TrustBuilder {
-	b.trust.TrustedDomain = domain
-	return b
 }
 
 func (b *TrustBuilder) WithDirection(direction string) *TrustBuilder {

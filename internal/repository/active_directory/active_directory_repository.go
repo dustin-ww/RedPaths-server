@@ -5,6 +5,7 @@ import (
 	"RedPaths-server/pkg/model/active_directory"
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/dgraph-io/dgo/v210"
@@ -12,10 +13,14 @@ import (
 
 type ActiveDirectoryRepository interface {
 	// CRUD
-	Create(ctx context.Context, tx *dgo.Txn, activeDirectory *active_directory.ActiveDirectory) (*active_directory.ActiveDirectory, error)
+	Create(ctx context.Context, tx *dgo.Txn, activeDirectory *active_directory.ActiveDirectory, actor string) (*active_directory.ActiveDirectory, error)
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*active_directory.ActiveDirectory, error)
 	UpdateActiveDirectory(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*active_directory.ActiveDirectory, error)
 	Delete(ctx context.Context, tx *dgo.Txn, uid string) error
+
+	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.ActiveDirectory, error)
+
+	FindByForestNameInProject(ctx context.Context, tx *dgo.Txn, projectUID, adForestName string) (*active_directory.ActiveDirectory, error)
 
 	// Relations
 	AddDomain(ctx context.Context, tx *dgo.Txn, activeDirectoryUID, domainUID string) error
@@ -27,6 +32,35 @@ type DgraphActiveDirectoryRepository struct {
 
 func NewDgraphActiveDirectoryRepository(db *dgo.Dgraph) *DgraphActiveDirectoryRepository {
 	return &DgraphActiveDirectoryRepository{DB: db}
+}
+
+func (r *DgraphActiveDirectoryRepository) FindByForestNameInProject(ctx context.Context, tx *dgo.Txn, projectUID, adForestName string) (*active_directory.ActiveDirectory, error) {
+	return dgraphutil.GetEntityByFieldInDomain[active_directory.ActiveDirectory](ctx, tx, projectUID, "ActiveDirectory", "forest_name", adForestName)
+}
+
+func (r *DgraphActiveDirectoryRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.ActiveDirectory, error) {
+	fields := []string{
+		"uid",
+		"forest_name",
+		"forest_functional_level",
+		"dgraph.type",
+		"~project.has_ad { uid }",
+	}
+
+	activeDirectoryForests, err := dgraphutil.GetEntitiesByRelation[*active_directory.ActiveDirectory](
+		ctx,
+		tx,
+		"ActiveDirectory",
+		"~project.has_ad",
+		projectUID,
+		fields,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Found %d ads for project %s\n", len(activeDirectoryForests), projectUID)
+	return activeDirectoryForests, nil
 }
 
 // Create adds a new project to the database

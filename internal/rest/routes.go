@@ -25,7 +25,10 @@ func RegisterProjectHandlers(
 	domainService *active_directory.DomainService,
 	hostService *active_directory.HostService,
 	serviceService *active_directory.ServiceService,
-	userService *active_directory.UserService) {
+	userService *active_directory.UserService,
+	dirNodeService *active_directory.DirectoryNodeService,
+	activeDirectoryService *active_directory.ActiveDirectoryService,
+) {
 
 	projectHandler := handlers.NewProjectHandler(projectService)
 	logHandler := handlers.NewLogHandler(logService)
@@ -33,13 +36,14 @@ func RegisterProjectHandlers(
 	hostHandler := handlers.NewHostHandler(hostService)
 	serviceHandler := handlers.NewServiceHandler(serviceService)
 	userHandler := handlers.NewUserHandler(userService)
+	dirNodeHandler := handlers.NewDirectoryNodeHandler(dirNodeService)
+	adHandler := handlers.NewActiveDirectoryHandler(activeDirectoryService)
 
 	projects := router.Group("/projects")
 	{
-		projects.GET("/overviews", projectHandler.GetProjectOverviews)
-		projects.DELETE("/:projectUID", projectHandler.Delete)
 		projects.GET("", projectHandler.GetProjectOverviews)
 		projects.POST("", projectHandler.CreateProject)
+		projects.DELETE("/:projectUID", projectHandler.Delete)
 
 		project := projects.Group("/:projectUID")
 		project.Use(middleware.ProjectContext(projectService))
@@ -47,68 +51,52 @@ func RegisterProjectHandlers(
 			project.GET("", projectHandler.Get)
 			project.PATCH("", projectHandler.UpdateProject)
 
-			domains := project.Group("/domains")
-			{
-				domains.GET("", projectHandler.GetDomains)
-				domains.POST("", projectHandler.AddDomain)
-				domain := domains.Group("/:domainUID")
-				domain.Use(middleware.DomainContext(projectService))
-				{
-					domains.PATCH("", domainHandler.UpdateDomain)
+			// --- Active Directories ---
+			project.GET("/active-directories", projectHandler.GetActiveDirectories)
+			project.POST("/active-directories", projectHandler.AddActiveDirectory)
+			project.GET("/active-directories/:adUID", adHandler.Get)
+			project.PATCH("/active-directories/:adUID", adHandler.UpdateActiveDirectory)
+			project.PATCH("/active-directories/:adUID/domains", adHandler.GetDomains)
+			project.POST("/active-directories/:adUID/domains", adHandler.AddDomain)
 
-					domain.GET("/hosts", domainHandler.GetHosts)
-					domain.POST("/hosts", domainHandler.AddHost)
-				}
+			// --- Domains ---
+			//project.GET("/domains", adHandler.GetDomains) TODO implement
+			//project.POST("/domains", adHandler.AddDomain) TODO implement
+			project.PATCH("/domains/:domainUID", domainHandler.UpdateDomain)
+			project.GET("/domains/:domainUID/hosts", domainHandler.GetHosts)
+			project.POST("/domains/:domainUID/hosts", domainHandler.AddHost)
+			project.GET("/domains/:domainUID/directory-nodes", domainHandler.GetDirectoryNodes)
+			project.POST("/domains/:domainUID/directory-nodes", domainHandler.AddDirectoryNode)
+			//project.POST("/domains/:domainUID/users", domainHandler.)
 
-			}
+			// --- Directory Nodes (OU / Container) ---
+			//project.GET("/directory-nodes", dirNodeHandler.GetDirectoryNodes) TODO implement
+			//project.POST("/directory-nodes", dirNodeHandler.CreateDirectoryNode) TODO implement
+			/*project.GET("/directory-nodes/:dirNodeUID", dirNodeHandler.GetDirectoryNode)*/
+			project.PATCH("/directory-nodes/:dirNodeUID", dirNodeHandler.UpdateDirectoryNode)
+			project.GET("/directory-nodes/:dirNodeUID/users", dirNodeHandler.GetUsers)
 
-			hosts := project.Group("/hosts")
-			{
-				hosts.POST("", hostHandler.CreateHost)
-				hosts.GET("", projectHandler.GetHosts)
+			// --- Hosts ---
+			project.GET("/hosts", projectHandler.GetHosts)
+			project.POST("/hosts", hostHandler.CreateHost)
+			project.PATCH("/hosts/:hostUID", hostHandler.UpdateHost)
+			project.GET("/hosts/:hostUID/services", serviceHandler.GetServices)
+			project.PATCH("/services/:serviceUID", serviceHandler.UpdateService)
 
-				host := hosts.Group("/:hostUID")
-				host.Use(middleware.HostContext(projectService))
-				{
-					host.PATCH("", hostHandler.UpdateHost)
+			// --- Users ---
+			project.GET("/users", projectHandler.GetUsers)
+			project.POST("/users", userHandler.CreateUser)
+			project.PATCH("/users/:userUID", userHandler.UpdateUser)
 
-					host.GET("/services", serviceHandler.GetServices)
+			// --- Targets ---
+			project.GET("/targets", projectHandler.GetTargets)
+			project.POST("/targets", projectHandler.CreateTarget)
 
-					service := host.Group("/:serviceUID")
-					service.Use(middleware.ServiceContext(hostService))
-					{
-						service.PATCH("", serviceHandler.UpdateService)
-					}
-
-				}
-			}
-
-			users := project.Group("/users")
-			{
-				users.GET("", projectHandler.GetUsers)
-				users.POST("", userHandler.CreateUser)
-
-				user := users.Group("/:userUID")
-				user.Use(middleware.UserContext(projectService))
-				{
-					user.PATCH("", userHandler.UpdateUser)
-				}
-
-			}
-
-			targets := project.Group("/targets")
-			{
-				targets.GET("", projectHandler.GetTargets)
-				targets.POST("", projectHandler.CreateTarget)
-			}
-
-			logs := project.Group("/logs")
-			{
-				logs.GET("", logHandler.GetLogs)
-				logs.POST("/query", logHandler.GetLogsWithOptions)
-				logs.GET("/types", logHandler.GetLogTypes)
-				logs.GET("/mkeys", logHandler.GetModuleKeySet)
-			}
+			// --- Logs ---
+			project.GET("/logs", logHandler.GetLogs)
+			project.POST("/logs/query", logHandler.GetLogsWithOptions)
+			project.GET("/logs/types", logHandler.GetLogTypes)
+			project.GET("/logs/mkeys", logHandler.GetModuleKeySet)
 		}
 	}
 }

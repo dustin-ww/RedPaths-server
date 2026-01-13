@@ -14,19 +14,22 @@ import (
 )
 
 type DomainService struct {
-	domainRepo active_directory.DomainRepository
-	hostRepo   active_directory.HostRepository
-	db         *dgo.Dgraph
+	domainRepo        active_directory.DomainRepository
+	hostRepo          active_directory.HostRepository
+	directoryNodeRepo active_directory.DirectoryNodeRepository
+	db                *dgo.Dgraph
 }
 
 func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 	domainRepo := active_directory.NewDgraphDomainRepository(dgraphCon)
 	hostRepo := active_directory.NewDgraphHostRepository(dgraphCon)
+	directoryNodeRepo := active_directory.NewDgraphDirectoryNodeRepository(dgraphCon)
 
 	return &DomainService{
-		db:         dgraphCon,
-		domainRepo: domainRepo,
-		hostRepo:   hostRepo,
+		db:                dgraphCon,
+		domainRepo:        domainRepo,
+		hostRepo:          hostRepo,
+		directoryNodeRepo: directoryNodeRepo,
 	}, nil
 }
 
@@ -73,9 +76,62 @@ func (s *DomainService) AddHost(ctx context.Context, domainUID string, host *mod
 
 	return hostUID, err
 }
+
+func (s *DomainService) AddDirectoryNode(ctx context.Context, domainUID string, incomingDirectoryNode *active_directory2.DirectoryNode, actor string) (*active_directory2.DirectoryNode, error) {
+
+	log.Println("[ADD DIRECTORY NODE]")
+
+	var createdDirectoryNode *active_directory2.DirectoryNode
+
+	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
+
+		var existingDirectoryNode *active_directory2.DirectoryNode
+		var err error
+
+		// if directory node is top level node in domain (directly connected to domain)
+		if incomingDirectoryNode.Parent == nil {
+			existingDirectoryNode, err = s.directoryNodeRepo.FindByDistinguishedNameInDomain(ctx, tx, domainUID, incomingDirectoryNode.DistinguishedName)
+		} else {
+			//TODO check in dependency chain
+		}
+
+		if err != nil {
+			return fmt.Errorf("directory node existence check failed: %w", err)
+		}
+
+		if existingDirectoryNode != nil {
+			log.Printf("[ADD DIRECTORY NODE]: Directory node already exists with dsname %s in domain %s\n", incomingDirectoryNode.DistinguishedName, domainUID)
+			createdDirectoryNode = existingDirectoryNode
+			return nil
+		}
+
+		directoryNode, err := s.directoryNodeRepo.Create(ctx, tx, incomingDirectoryNode, actor)
+		if err != nil {
+			return fmt.Errorf("failed to create directory node: %w", err)
+		}
+
+		log.Printf("Created directory node with dsname %s receiving uid %s\n", directoryNode.DistinguishedName, directoryNode.UID)
+
+		// connect domain with host
+		if err := s.domainRepo.AddDirectoryNode(ctx, tx, domainUID, directoryNode.UID); err != nil {
+			return fmt.Errorf("failed to link directory node to domain: %w", err)
+		}
+
+		return nil
+	})
+
+	return createdDirectoryNode, err
+}
+
 func (s *DomainService) GetDomainHosts(ctx context.Context, domainUID string) ([]*model.Host, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Host, error) {
 		return s.hostRepo.GetAllByDomainUID(ctx, tx, domainUID)
+	})
+}
+
+func (s *DomainService) GetDomainDirectoryNodes(ctx context.Context, domainUID string) ([]*active_directory2.DirectoryNode, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*active_directory2.DirectoryNode, error) {
+		return s.directoryNodeRepo.GetAllByDomainUID(ctx, tx, domainUID)
 	})
 }
 

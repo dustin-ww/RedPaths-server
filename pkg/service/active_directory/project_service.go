@@ -7,10 +7,9 @@ import (
 	"RedPaths-server/internal/repository/changes"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
-	active_directory2 "RedPaths-server/pkg/model/active_directory"
+	rpad "RedPaths-server/pkg/model/active_directory"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 
@@ -22,11 +21,12 @@ import (
 
 // ProjectService handles business logic for projects
 type ProjectService struct {
-	projectRepo active_directory.ProjectRepository
-	domainRepo  active_directory.DomainRepository
-	hostRepo    active_directory.HostRepository
-	targetRepo  active_directory.TargetRepository
-	userRepo    active_directory.UserRepository
+	projectRepo         active_directory.ProjectRepository
+	adRepo              active_directory.ActiveDirectoryRepository
+	hostRepo            active_directory.HostRepository
+	targetRepo          active_directory.TargetRepository
+	userRepo            active_directory.UserRepository
+	activeDirectoryRepo active_directory.ActiveDirectoryRepository
 
 	changeRepo changes.RedPathsChangeRepository
 	db         *dgo.Dgraph
@@ -37,18 +37,45 @@ type ProjectService struct {
 func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectService, error) {
 
 	return &ProjectService{
-		db:          dgraphCon,
-		pdb:         postgresCon,
-		projectRepo: active_directory.NewDgraphProjectRepository(dgraphCon),
-		domainRepo:  active_directory.NewDgraphDomainRepository(dgraphCon),
-		hostRepo:    active_directory.NewDgraphHostRepository(dgraphCon),
-		targetRepo:  active_directory.NewDgraphTargetRepository(dgraphCon),
-		userRepo:    active_directory.NewDgraphUserRepository(dgraphCon),
-		changeRepo:  changes.NewPostgresRedPathsChangesRepository(),
+		db:                  dgraphCon,
+		pdb:                 postgresCon,
+		projectRepo:         active_directory.NewDgraphProjectRepository(dgraphCon),
+		adRepo:              active_directory.NewDgraphActiveDirectoryRepository(dgraphCon),
+		hostRepo:            active_directory.NewDgraphHostRepository(dgraphCon),
+		targetRepo:          active_directory.NewDgraphTargetRepository(dgraphCon),
+		userRepo:            active_directory.NewDgraphUserRepository(dgraphCon),
+		changeRepo:          changes.NewPostgresRedPathsChangesRepository(),
+		activeDirectoryRepo: active_directory.NewDgraphActiveDirectoryRepository(dgraphCon),
 	}, nil
 }
 
-func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *active_directory2.Domain, actor string) (string, error) {
+func (s *ProjectService) AddActiveDirectory(ctx context.Context, projectUID string, incomingActiveDirectory *rpad.ActiveDirectory, actor string) (*rpad.ActiveDirectory, error) {
+	var createdAD *rpad.ActiveDirectory
+	log.Printf("[AddActiveDirectory] incomingAD.Name=%s, projectUID=%s", incomingActiveDirectory.ForestName, projectUID)
+	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
+		existingActiveDirectory, err := s.activeDirectoryRepo.FindByForestNameInProject(ctx, tx, projectUID, incomingActiveDirectory.ForestName)
+		if err != nil {
+			return fmt.Errorf("error while checking if active directory exists: %v", err)
+		}
+
+		if existingActiveDirectory != nil {
+			createdAD = existingActiveDirectory
+			log.Printf("[AddActiveDirectory] active directory with forest name %s already exists in project with uid: %s", incomingActiveDirectory.ForestName, projectUID)
+			return nil
+		}
+		createdAD, err = s.activeDirectoryRepo.Create(ctx, tx, incomingActiveDirectory, actor)
+
+		err = s.projectRepo.AddActiveDirectory(ctx, tx, projectUID, createdAD.UID)
+		if err != nil {
+			return fmt.Errorf("error while creating new active directory: %v", err)
+		}
+		return nil
+	})
+
+	return createdAD, err
+}
+
+/*func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *active_directory2.Domain, actor string) (string, error) {
 	var domainUID string
 
 	log.Printf("[AddDomain] incomingDomain.Name=%s, projectUID=%s", incomingDomain.Name, projectUID)
@@ -80,9 +107,9 @@ func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incom
 	})
 
 	return domainUID, err
-}
+}*/
 
-func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*active_directory2.Domain, error) {
+/*func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*active_directory2.Domain, error) {
 	domain, err := s.domainRepo.GetByNameInProject(ctx, tx, projectUID, domainName)
 	if err != nil {
 		if errors.Is(err, rperror.ErrNotFound) {
@@ -105,9 +132,9 @@ func (s *ProjectService) GetDomainInProjectByUID(ctx context.Context, projectUID
 		}
 		return domain, nil
 	})
-}
+}*/
 
-func (s *ProjectService) createAndLinkDomain(
+/*func (s *ProjectService) createAndLinkDomain(
 	ctx context.Context,
 	tx *dgo.Txn,
 	domain *active_directory2.Domain,
@@ -132,13 +159,13 @@ func (s *ProjectService) createAndLinkDomain(
 
 	return nil
 }
-
-func (s *ProjectService) GetProjectDomains(ctx context.Context, projectUID string) ([]*active_directory2.Domain, error) {
+*/
+/*func (s *ProjectService) GetProjectDomains(ctx context.Context, projectUID string) ([]*active_directory2.Domain, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*active_directory2.Domain, error) {
-		return s.domainRepo.GetAllByProjectUID(ctx, tx, projectUID)
+		return s.domainRepo.GetAllByActiveDirectoryUID(ctx, tx, projectUID)
 	})
 }
-
+*/
 // CreateTarget creates a new target and links it to a project.
 // TODO implement cidr
 func (s *ProjectService) CreateTarget(ctx context.Context, projectUID, ip, note string, cidr int) (string, error) {
@@ -249,6 +276,12 @@ func (s *ProjectService) UpdateProject(ctx context.Context, uid, actor string, f
 	})
 }
 
+func (s *ProjectService) GetAllActiveDirectories(ctx context.Context, projectUID string) ([]*rpad.ActiveDirectory, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*rpad.ActiveDirectory, error) {
+		return s.adRepo.GetByProjectUID(ctx, tx, projectUID)
+	})
+}
+
 // GetTargets retrieves all targets associated with a project.
 func (s *ProjectService) GetTargets(ctx context.Context, projectUID string) ([]*model.Target, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Target, error) {
@@ -288,15 +321,33 @@ func (s *ProjectService) GetHostByProject(ctx context.Context, projectUID, hostU
 	})
 }
 
-func (s *ProjectService) GetAllUserInProject(ctx context.Context, projectUID string) ([]*active_directory2.User, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*active_directory2.User, error) {
+func (s *ProjectService) GetAllUserInProject(ctx context.Context, projectUID string) ([]*rpad.User, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*rpad.User, error) {
 		return s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 
 	})
 }
 
-func (s *ProjectService) GetUserInProject(ctx context.Context, projectUID, userUID string) (*active_directory2.User, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*active_directory2.User, error) {
+func (s *ProjectService) GetUserInProject(ctx context.Context, projectUID, userUID string) (*rpad.User, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*rpad.User, error) {
+		users, err := s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user by project: %w", err)
+		}
+
+		for _, user := range users {
+			if user.UID == userUID {
+				return user, nil
+			}
+		}
+		log.Println("Not user found for given user UID")
+		return nil, rperror.ErrNotFound
+	})
+}
+
+func (s *ProjectService) GetAllActiveDirectoriesInProject(ctx context.Context, projectUID, userUID string) (*rpad.User, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*rpad.User, error) {
 		users, err := s.userRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 
 		if err != nil {

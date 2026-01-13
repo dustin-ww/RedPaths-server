@@ -140,7 +140,7 @@ func GetLogger(runID string, projectUID string, db *gorm.DB) *SSELogger {
 
 // ForModule returns a new logger with module context
 func (l *SSELogger) ForModule(moduleKey string) *SSELogger {
-	// Create a shallow copy of the logger
+	// DeprecatedCreate a shallow copy of the logger
 	moduleCopy := *l
 	moduleCopy.moduleKey = moduleKey
 	return &moduleCopy

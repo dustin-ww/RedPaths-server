@@ -59,7 +59,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 		WithData("timestamp", time.Now().Unix()).
 		WithData("module", targetModuleKey)
 
-	// Create a module-specific logger
+	// DeprecatedCreate a module-specific logger
 	moduleLogger := logger.ForModule(targetModuleKey)
 	moduleLogger.Info("Starting module execution")
 
@@ -94,7 +94,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 		moduleRunID := uuid.New().String()
 		moduleRunSuccessful := false
 
-		// Create module-specific logger for each module
+		// DeprecatedCreate module-specific logger for each module
 		currentModuleLogger := logger.ForModule(module.Key)
 
 		currentModuleLogger.Info(fmt.Sprintf("Executing module %d/%d: %s",

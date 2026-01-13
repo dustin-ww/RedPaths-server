@@ -1,44 +1,53 @@
 package model
 
 import (
+	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/utils"
 	"errors"
 	"time"
 )
 
 type Host struct {
-	// PRIMARY Identifier
-	IP string `json:"ip"`
 
 	// Internal
-	UID string `json:"uid,omitempty"`
+	UID   string   `json:"uid,omitempty"`
+	DType []string `json:"dgraph.type,omitempty"`
 
-	// Available Values
-	Name               string          `json:"name,omitempty"`
-	IsDomainController bool            `json:"is_domain_controller,omitempty"`
-	BelongsToDomain    []*utils.UIDRef `json:"belongs_to_domain,omitempty"`
-	HasService         []*utils.UIDRef `json:"has_service,omitempty"`
-	DType              []string        `json:"dgraph.type,omitempty"`
-	InternalCreatedAt  time.Time       `json:"internal_created_at,omitempty"`
+	// Specific
+	Name        string `json:"host.name,omitempty"`
+	Hostname    string `json:"host.hostname,omitempty"`
+	Description string `json:"host.description,omitempty"`
+	// PRIMARY Identifier
+	IP                 string `json:"host.ip"`
+	IsDomainController bool   `json:"host.is_domain_controller,omitempty"`
 
-	// AD related
-	DistinguishedName      string    `json:"distinguished_name"`
-	ObjectGUID             string    `json:"object_guid"`
-	ObjectSid              string    `json:"object_sid"`
-	SAMAccountName         string    `json:"sam_account_name"`
-	DNSHostName            string    `json:"dns_host_name"`
-	OperatingSystem        string    `json:"operating_system"`
-	OperatingSystemVersion string    `json:"operating_system_version"`
-	LastLogonTimestamp     time.Time `json:"last_logon_timestamp"`
-	WhenCreated            time.Time `json:"when_created"`
-	WhenChanged            time.Time `json:"when_changed"`
-	UserAccountControl     int       `json:"user_account_control"`
+	DistinguishedName string `json:"host.distinguished_name"`
+	/*	ObjectGUID             string    `json:"object_guid"`
+		ObjectSid              string    `json:"object_sid"`
+		SAMAccountName         string    `json:"sam_account_name"`*/
+	DNSHostName            string    `json:"host.dns_host_name"`
+	OperatingSystem        string    `json:"host.operating_system"`
+	OperatingSystemVersion string    `json:"host.operating_system_version"`
+	LastLogonTimestamp     time.Time `json:"host.last_logon_timestamp"`
+	UserAccountControl     int       `json:"host.user_account_control"`
 
-	// History related
-	DiscoveredAt time.Time `json:"discovered_at,omitempty"`
-	DiscoveredBy string    `json:"discovered_by,omitempty"`
-	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
-	LastSeenBy   string    `json:"last_seen_by,omitempty"`
+	// Relations
+	Runs   []*utils.UIDRef `json:"host.runs,omitempty"`
+	HasACL []*utils.UIDRef `json:"host.has_acl,omitempty"`
+
+	// Meta
+	RedPathsMetadata core.RedPathsMetadata `json:"-"`
+}
+
+func (u *Host) UnmarshalJSON(data []byte) error {
+	type Alias Host
+	aux := (*Alias)(u)
+	return core.UnmarshalWithMetadata(data, aux, &u.RedPathsMetadata)
+}
+
+func (u Host) MarshalJSON() ([]byte, error) {
+	type Alias Host
+	return core.MarshalWithMetadata(Alias(u), u.RedPathsMetadata)
 }
 
 type HostBuilder struct {
@@ -48,27 +57,26 @@ type HostBuilder struct {
 func NewHostBuilder() *HostBuilder {
 	return &HostBuilder{
 		host: &Host{
-			DType:             []string{"host"},
-			InternalCreatedAt: time.Now(),
+			DType: []string{"host"},
 		},
 	}
 }
 
 func (b *HostBuilder) WithServices(services []*utils.UIDRef) *HostBuilder {
-	b.host.HasService = services
+	b.host.Runs = services
 	return b
 }
 
 func (b *HostBuilder) AddService(service *Service) *HostBuilder {
 	if service != nil && service.UID != "" {
-		b.host.HasService = append(b.host.HasService, &utils.UIDRef{UID: service.UID})
+		b.host.Runs = append(b.host.Runs, &utils.UIDRef{UID: service.UID})
 	}
 	return b
 }
 
 func (b *HostBuilder) AddServiceUID(uid string) *HostBuilder {
 	if uid != "" {
-		b.host.HasService = append(b.host.HasService, &utils.UIDRef{UID: uid})
+		b.host.Runs = append(b.host.Runs, &utils.UIDRef{UID: uid})
 	}
 	return b
 }
@@ -100,32 +108,27 @@ func (b *HostBuilder) AsDomainController() *HostBuilder {
 	return b
 }
 
-func (b *HostBuilder) WithDomain(domainUID string) *HostBuilder {
-	if domainUID != "" {
-		b.host.BelongsToDomain = []*utils.UIDRef{{UID: domainUID}}
-	}
-	return b
-}
 func (b *HostBuilder) WithDistinguishedName(dn string) *HostBuilder {
 	b.host.DistinguishedName = dn
 	return b
 }
 
-func (b *HostBuilder) WithObjectGUID(guid string) *HostBuilder {
-	b.host.ObjectGUID = guid
-	return b
-}
+/*
+	func (b *HostBuilder) WithObjectGUID(guid string) *HostBuilder {
+		b.host = guid
+		return b
+	}
 
-func (b *HostBuilder) WithObjectSid(sid string) *HostBuilder {
-	b.host.ObjectSid = sid
-	return b
-}
+	func (b *HostBuilder) WithObjectSid(sid string) *HostBuilder {
+		b.host.ObjectSid = sid
+		return b
+	}
 
-func (b *HostBuilder) WithSAMAccountName(name string) *HostBuilder {
-	b.host.SAMAccountName = name
-	return b
-}
-
+	func (b *HostBuilder) WithSAMAccountName(name string) *HostBuilder {
+		b.host.SAMAccountName = name
+		return b
+	}
+*/
 func (b *HostBuilder) WithDNSHostName(hostname string) *HostBuilder {
 	b.host.DNSHostName = hostname
 	return b
@@ -146,7 +149,7 @@ func (b *HostBuilder) WithLastLogonTimestamp(timestamp time.Time) *HostBuilder {
 	return b
 }
 
-func (b *HostBuilder) WithWhenCreated(created time.Time) *HostBuilder {
+/*func (b *HostBuilder) WithWhenCreated(created time.Time) *HostBuilder {
 	b.host.WhenCreated = created
 	return b
 }
@@ -154,7 +157,7 @@ func (b *HostBuilder) WithWhenCreated(created time.Time) *HostBuilder {
 func (b *HostBuilder) WithWhenChanged(changed time.Time) *HostBuilder {
 	b.host.WhenChanged = changed
 	return b
-}
+}*/
 
 func (b *HostBuilder) WithUserAccountControl(uac int) *HostBuilder {
 	b.host.UserAccountControl = uac

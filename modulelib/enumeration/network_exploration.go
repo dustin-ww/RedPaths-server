@@ -226,7 +226,7 @@ func (n *NetworkExplorer) buildHost(nmapResult scan.NmapScanResult, ip string, p
 
 	ctx := context.Background()
 
-	// Create the host in the appropriate domain
+	// DeprecatedCreate the host in the appropriate domain
 	var hostUID string
 	if domainUID != "" {
 		log.Printf("Using domain UID: %s", domainUID)

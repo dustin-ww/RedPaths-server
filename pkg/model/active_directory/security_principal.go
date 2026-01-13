@@ -1,7 +1,7 @@
 package active_directory
 
 type SecurityPrincipal interface {
-	GetID() string
+	GetUID() string
 	GetSID() string
 	GetName() string
 	PrincipalType() PrincipalType
@@ -15,7 +15,3 @@ const (
 	PrincipalComputer       PrincipalType = "Computer"
 	PrincipalServiceAccount PrincipalType = "ServiceAccount"
 )
-
-func (b BasePrincipal) GetID() string   { return b.ID }
-func (b BasePrincipal) GetSID() string  { return b.SID }
-func (b BasePrincipal) GetName() string { return b.Name }

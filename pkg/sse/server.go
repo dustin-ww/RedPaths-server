@@ -130,7 +130,7 @@ func TriggerEventHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create payload with timestamp
+	// DeprecatedCreate payload with timestamp
 	payload := map[string]interface{}{
 		"message":   message,
 		"source":    "HTTP-Trigger",

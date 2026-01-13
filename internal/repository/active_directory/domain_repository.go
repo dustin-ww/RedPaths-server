@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 	"github.com/dgraph-io/dgo/v210/protos/api"
@@ -16,35 +14,53 @@ import (
 
 type DomainRepository interface {
 	//CRUD
-	Create(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) // Returns UID
+	DeprecatedCreate(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) // Returns UID
+	Create(ctx context.Context, tx *dgo.Txn, domain *active_directory.Domain, actor string) (*active_directory.Domain, error)
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*active_directory.Domain, error)
 	GetByNameInProject(ctx context.Context, tx *dgo.Txn, projectUID, name string) (*active_directory.Domain, error)
 	GetByUIDInProject(ctx context.Context, tx *dgo.Txn, projectUID, domainUID string) (*active_directory.Domain, error)
+
+	FindByNameInActiveDirectory(ctx context.Context, tx *dgo.Txn, activeDirectoryUID, domainName string) (*active_directory.Domain, error)
 
 	UpdateDomain(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*active_directory.Domain, error)
 	CreateWithObject(ctx context.Context, tx *dgo.Txn, model *active_directory.Domain, actor string) (string, error)
 
 	//Relations
 	AddHost(ctx context.Context, tx *dgo.Txn, domainUID, hostUID string) error
-	AddUser(ctx context.Context, tx *dgo.Txn, domainUID, userUID string) error
-	AddToProject(ctx context.Context, tx *dgo.Txn, domainUID string, projectUID string) error
+	//AddUser(ctx context.Context, tx *dgo.Txn, domainUID, userUID string) error
+	//AddToProject(ctx context.Context, tx *dgo.Txn, domainUID string, projectUID string) error
+	AddDirectoryNode(ctx context.Context, tx *dgo.Txn, domainUID, directoryNodeUID string) error
 
 	// Checker
 	DomainExistsByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (bool, error)
 
 	// Reverse Relations
-	GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.Domain, error)
+	//GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.Domain, error)
+
+	GetAllByActiveDirectoryUID(ctx context.Context, tx *dgo.Txn, activeDirectoryUID string) ([]*active_directory.Domain, error)
 }
 
 type DgraphDomainRepository struct {
 	DB *dgo.Dgraph
 }
 
+func (r *DgraphDomainRepository) FindByNameInActiveDirectory(ctx context.Context, tx *dgo.Txn, activeDirectoryUID, domainName string) (*active_directory.Domain, error) {
+	return dgraphutil.GetEntityByFieldInDomain[active_directory.Domain](ctx, tx, activeDirectoryUID, "Domain", "name", domainName)
+}
+
+func (r *DgraphDomainRepository) Create(ctx context.Context, tx *dgo.Txn, incomingDomain *active_directory.Domain, actor string) (*active_directory.Domain, error) {
+	createdDomain, err := dgraphutil.CreateEntity(ctx, tx, "Domain", incomingDomain)
+	if err != nil {
+		return nil, err
+	}
+	return createdDomain, nil
+}
+
 func (r *DgraphDomainRepository) CreateWithObject(ctx context.Context, tx *dgo.Txn, domain *active_directory.Domain, actor string) (string, error) {
-	domain.DiscoveredAt = time.Now().UTC()
-	domain.LastSeenAt = time.Now().UTC()
-	domain.DiscoveredBy = actor
-	domain.LastSeenBy = actor
+	/*	domain.DiscoveredAt = time.Now().UTC()
+		domain.LastSeenAt = time.Now().UTC()
+		domain.DiscoveredBy = actor
+		domain.LastSeenBy = actor*/
 	domain.DType = []string{"Domain"}
 	domain.UID = "_:blank-0"
 
@@ -113,20 +129,6 @@ func (r *DgraphDomainRepository) GetByUIDInProject(ctx context.Context, tx *dgo.
 	return domains[0], nil
 }
 
-func (r *DgraphDomainRepository) AddToProject(
-	ctx context.Context,
-	tx *dgo.Txn,
-	domainUID string,
-	projectUID string,
-) error {
-	relationName := "belongs_to_project"
-	err := dgraphutil.AddRelation(ctx, tx, domainUID, projectUID, relationName)
-	if err != nil {
-		return fmt.Errorf("error while linking domain %s to project %s with relation %s", domainUID, projectUID, relationName)
-	}
-	return nil
-}
-
 func (r *DgraphDomainRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*active_directory.Domain, error) {
 	query := `
         query Domain($uid: string) {
@@ -151,7 +153,7 @@ func (r *DgraphDomainRepository) Get(ctx context.Context, tx *dgo.Txn, uid strin
 
 }
 
-func (r *DgraphDomainRepository) GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.Domain, error) {
+func (r *DgraphDomainRepository) GetAllByActiveDirectoryUID(ctx context.Context, tx *dgo.Txn, activeDirectoryUID string) ([]*active_directory.Domain, error) {
 	fields := []string{
 		"uid",
 		"name",
@@ -178,21 +180,19 @@ func (r *DgraphDomainRepository) GetAllByProjectUID(ctx context.Context, tx *dgo
 		ctx,
 		tx,
 		"Domain",
-		"belongs_to_project",
-		projectUID,
+		"~active_directory.has_domain",
+		activeDirectoryUID,
 		fields,
 	)
 
-	log.Printf("Fetched domain belongs to project uid: %s", domains[0].BelongsToProject.UID)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("Found %d domains for project %s\n", len(domains), projectUID)
 	return domains, nil
 }
 
-func (r *DgraphDomainRepository) Create(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) {
+func (r *DgraphDomainRepository) DeprecatedCreate(ctx context.Context, tx *dgo.Txn, name string, actor string) (string, error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -210,15 +210,34 @@ func (r *DgraphDomainRepository) AddHost(ctx context.Context, tx *dgo.Txn, domai
 	return nil
 }
 
+func (r *DgraphDomainRepository) AddDirectoryNode(ctx context.Context, tx *dgo.Txn, domainUID, directoryNodeUID string) error {
+	relationName := "has_host"
+	err := dgraphutil.AddRelation(ctx, tx, domainUID, directoryNodeUID, relationName)
+	if err != nil {
+		return fmt.Errorf("error while linking directory node %s to domain %s with relation %s", directoryNodeUID, domainUID, relationName)
+	}
+	return nil
+}
+
 func (r *DgraphDomainRepository) DomainExistsByName(ctx context.Context, tx *dgo.Txn, projectUID, name string) (bool, error) {
 	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "Domain", "name", name)
 }
 
-func (r *DgraphDomainRepository) AddUser(ctx context.Context, tx *dgo.Txn, domainUID, userUID string) error {
-	relationName := "has_user"
-	err := dgraphutil.AddRelation(ctx, tx, domainUID, userUID, relationName)
+/*
+	func (r *DgraphDomainRepository) AddUser(ctx context.Context, tx *dgo.Txn, domainUID, userUID string) error {
+		relationName := "has_user"
+		err := dgraphutil.AddRelation(ctx, tx, domainUID, userUID, relationName)
+		if err != nil {
+			return fmt.Errorf("error while linking user %s to domain %s with relation %s", userUID, domainUID, relationName)
+		}
+		return nil
+	}
+*/
+func (r *DgraphActiveDirectoryRepository) AddDirectoryNode(ctx context.Context, tx *dgo.Txn, directoryNodeUID, securityPrincipalUID string) error {
+	relationName := "directory_node.locates"
+	err := dgraphutil.AddRelation(ctx, tx, directoryNodeUID, securityPrincipalUID, relationName)
 	if err != nil {
-		return fmt.Errorf("error while linking user %s to domain %s with relation %s", userUID, domainUID, relationName)
+		return fmt.Errorf("error while linking security principal %s to directory node %s with relation %s", securityPrincipalUID, directoryNodeUID, relationName)
 	}
 	return nil
 }

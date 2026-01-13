@@ -6,10 +6,13 @@ import (
 )
 
 type Service struct {
+	// Internal
 	UID   string   `json:"uid,omitempty"`
-	Name  string   `json:"name,omitempty"`
-	Port  string   `json:"port,omitempty"`
 	DType []string `json:"dgraph.type,omitempty"`
+
+	// Specific
+	Name string `json:"service.name,omitempty"`
+	Port string `json:"service.port,omitempty"`
 
 	// AD related
 	SPNs                    []string `json:"spns,omitempty"`
