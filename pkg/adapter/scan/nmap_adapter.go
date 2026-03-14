@@ -130,7 +130,8 @@ func (r *NmapScanResult) GetServices() []model.Service {
 
 		for _, port := range nmapHost.Ports.Port {
 			if port.State.State == "open" {
-				serviceBuilder := model.NewServiceBuilder()
+				// TODO: FIX
+				/*serviceBuilder := model.NewServiceBuilder()
 				serviceBuilder.WithName(port.Service.Name)
 				serviceBuilder.WithPort(port.Portid)
 
@@ -139,7 +140,7 @@ func (r *NmapScanResult) GetServices() []model.Service {
 				//}
 
 				service := serviceBuilder.Build()
-				services = append(services, service)
+				services = append(services, service)*/
 			}
 		}
 	}

@@ -4,22 +4,27 @@ import (
 	"RedPaths-server/internal/db"
 	rperror "RedPaths-server/internal/error"
 	"RedPaths-server/internal/repository/active_directory"
-	"RedPaths-server/internal/repository/dgraphutil"
+	"RedPaths-server/internal/repository/redpaths"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/core"
+	utils2 "RedPaths-server/pkg/model/utils"
+	"RedPaths-server/pkg/model/utils/assertion"
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 )
 
 type HostService struct {
-	hostRepo    active_directory.HostRepository
-	serviceRepo active_directory.ServiceRepository
-	projectRepo active_directory.ProjectRepository
-	domainRepo  active_directory.DomainRepository
-	db          *dgo.Dgraph
+	hostRepo      active_directory.HostRepository
+	serviceRepo   active_directory.ServiceRepository
+	projectRepo   active_directory.ProjectRepository
+	domainRepo    active_directory.DomainRepository
+	assertionRepo redpaths.AssertionRepository
+	db            *dgo.Dgraph
 }
 
 func NewHostService(dgraphCon *dgo.Dgraph) (*HostService, error) {
@@ -28,19 +33,29 @@ func NewHostService(dgraphCon *dgo.Dgraph) (*HostService, error) {
 	serviceRepo := active_directory.NewDgraphServiceRepository(dgraphCon)
 	projectRepo := active_directory.NewDgraphProjectRepository(dgraphCon)
 	domainRepo := active_directory.NewDgraphDomainRepository(dgraphCon)
+	assertionRepo := redpaths.NewDgraphAssertionRepository(dgraphCon)
 
 	return &HostService{
-		hostRepo:    hostRepo,
-		serviceRepo: serviceRepo,
-		projectRepo: projectRepo,
-		domainRepo:  domainRepo,
-		db:          dgraphCon}, nil
+		hostRepo:      hostRepo,
+		serviceRepo:   serviceRepo,
+		projectRepo:   projectRepo,
+		domainRepo:    domainRepo,
+		assertionRepo: assertionRepo,
+		db:            dgraphCon}, nil
 }
 
-func (s *HostService) AddService(ctx context.Context, hostUID string, service model.Service) (string, error) {
-	var serviceUID string
+func (s *HostService) AddService(
+	ctx context.Context,
+	assertionCtx assertion.Context,
+	hostUID string,
+	incomingService *model.Service, actor string) (*core.EntityResult[model.Service], error) {
+	log.Println("Starting adding service")
+	var result *core.EntityResult[model.Service]
+
+	log.Printf("Adding service %s to host %s", actor, incomingService.Name)
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		exists, existingUID, err := dgraphutil.ExistsByFieldOnParent(
+		// TODO: EXISTS CHECK
+		/*exists, existingUID, err := dgraphutil.ExistsByFieldOnParent(
 			ctx,
 			tx,
 			hostUID,
@@ -57,24 +72,52 @@ func (s *HostService) AddService(ctx context.Context, hostUID string, service mo
 		if exists {
 			log.Printf("Service already exists")
 			serviceUID = existingUID
-		} else {
-			serviceUID, err = s.serviceRepo.CreateWithObject(ctx, tx, service)
-			if err != nil {
-				return fmt.Errorf("failed to create service: %w", err)
-			}
-
-			if err := s.hostRepo.AddService(ctx, tx, hostUID, serviceUID); err != nil {
-				return fmt.Errorf("failed to link service to host: %w", err)
-			}
-
-			if err := s.serviceRepo.LinkToHost(ctx, tx, serviceUID, hostUID); err != nil {
-				return fmt.Errorf("failed to reverse link service to host: %w", err)
-			}
+		} else {*/
+		service, err := s.serviceRepo.Create(ctx, tx, incomingService, actor)
+		if err != nil {
+			return fmt.Errorf("failed to create service: %w", err)
 		}
 
+		assertionSchema := &core.Assertion{
+			Predicate:           core.PredicateRuns,
+			Method:              core.MethodDirectAdd,
+			Source:              actor,
+			Confidence:          assertionCtx.GetConfidence(),
+			Status:              core.StatusValidated,
+			Timestamp:           time.Now(),
+			HasDiscoveredParent: true,
+			MarkedAsHighValue:   assertionCtx.IsHighValue(),
+			Subject:             &utils2.UIDRef{UID: hostUID, Type: "Host"},
+			Object:              &utils2.UIDRef{UID: service.UID, Type: "Service"},
+		}
+
+		var assertions []*core.Assertion
+		createdAssertion, err := s.assertionRepo.Create(ctx, tx, assertionSchema)
+		if err != nil {
+			return fmt.Errorf("error while creating assertion with uid: %w with error: %w", err)
+		}
+
+		log.Printf("Created assertion with uid: %s", createdAssertion.UID)
+
+		/*if err := s.serviceRepo.LinkToHost(ctx, tx, serviceUID, hostUID); err != nil {
+			return fmt.Errorf("failed to reverse link service to host: %w", err)
+		}*/
+
+		assertions = append(assertions, createdAssertion)
+
+		result = &core.EntityResult[model.Service]{
+			Entity:     *service,
+			Assertions: assertions,
+			Metadata: &core.ResultMetadata{
+				Source:         actor,
+				ScanTimestamp:  time.Now(),
+				EntityCount:    1,
+				AssertionCount: len(assertions),
+			},
+		}
 		return nil
 	})
-	return serviceUID, err
+	return result, err
 }
 
 func (s *HostService) CreateWithUnknownDomain(ctx context.Context, host *model.Host, projectUID string, actor string) (string, error) {
@@ -97,8 +140,8 @@ func (s *HostService) CreateWithUnknownDomain(ctx context.Context, host *model.H
 	return hostUID, err
 }
 
-func (s *HostService) GetAllServicesByHost(ctx context.Context, hostUID string) ([]*model.Service, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Service, error) {
+func (s *HostService) GetAllServicesByHost(ctx context.Context, hostUID string) ([]*core.EntityResult[*model.Service], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*model.Service], error) {
 		return s.serviceRepo.GetByHostUID(ctx, tx, hostUID)
 	})
 }
@@ -112,8 +155,8 @@ func (s *HostService) GetServiceByHost(ctx context.Context, hostUID, serviceUID 
 		}
 
 		for _, service := range services {
-			if service.UID == serviceUID {
-				return service, nil
+			if service.Entity.UID == serviceUID {
+				return service.Entity, nil
 			}
 		}
 		log.Printf("Service not found by host uid %s", hostUID)

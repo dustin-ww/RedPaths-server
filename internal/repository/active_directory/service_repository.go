@@ -3,6 +3,7 @@ package active_directory
 import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/core"
 	"context"
 	"fmt"
 	"log"
@@ -12,29 +13,30 @@ import (
 
 type ServiceRepository interface {
 	//CRUD
-	CreateWithObject(ctx context.Context, tx *dgo.Txn, model model.Service) (string, error)
+	Create(ctx context.Context, tx *dgo.Txn, model *model.Service, actor string) (*model.Service, error)
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Service, error)
 	UpdateService(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Service, error)
+	GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*core.EntityResult[*model.Service], error)
 	//Relations
-	LinkToHost(ctx context.Context, tx *dgo.Txn, serviceUID, hostUID string) error
-	GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*model.Service, error)
+	/*	LinkToHost(ctx context.Context, tx *dgo.Txn, serviceUID, hostUID string) error
+		GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*model.Service, error)*/
 }
 
 type DgraphServiceRepository struct {
 	DB *dgo.Dgraph
 }
 
+func (r *DgraphServiceRepository) Create(ctx context.Context, tx *dgo.Txn, service *model.Service, actor string) (*model.Service, error) {
+	dgraphutil.InitCreateMetadata(&service.RedPathsMetadata, actor)
+	return dgraphutil.CreateEntity(ctx, tx, "service", service)
+}
+
 func (r *DgraphServiceRepository) UpdateService(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Service, error) {
 	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
-
 }
 
 func NewDgraphServiceRepository(db *dgo.Dgraph) *DgraphServiceRepository {
 	return &DgraphServiceRepository{DB: db}
-}
-
-func (r *DgraphServiceRepository) CreateWithObject(ctx context.Context, tx *dgo.Txn, service model.Service) (string, error) {
-	return dgraphutil.OldCreateEntity(ctx, tx, "Service", service)
 }
 
 func (r *DraphHostRepository) ServiceExistsByPortOnHost(ctx context.Context, tx *dgo.Txn, projectUID, ip string) (bool, error) {
@@ -67,27 +69,27 @@ func (r *DgraphServiceRepository) LinkToHost(ctx context.Context, tx *dgo.Txn, s
 }
 
 // TODO -> history runs on hosts (remove s)
-func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*model.Service, error) {
+func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*core.EntityResult[*model.Service], error) {
 	fields := []string{
 		"uid",
-		"name",
-		"port",
+		"service.name",
+		"service.port",
+		"created_at",
+		"modified_at",
+		"discovered_at",
+		"discovered_by",
+		"validated_at",
+		"validated_by",
 		"dgraph.type",
-		"deployed_on_host { uid }",
 	}
 
-	services, err := dgraphutil.GetEntitiesByRelation[*model.Service](
+	return dgraphutil.GetEntitiesWithAssertions[*model.Service](
 		ctx,
 		tx,
-		"Service",
-		"deployed_on_host",
 		hostUID,
+		core.PredicateRuns,
+		"Service",
 		fields,
+		"getHostServices",
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Printf("Found %d services for host %s\n", len(services), hostUID)
-	return services, nil
 }

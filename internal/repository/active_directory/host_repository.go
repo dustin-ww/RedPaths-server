@@ -3,6 +3,7 @@ package active_directory
 import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/core"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -25,7 +26,7 @@ type HostRepository interface {
 	GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error)
 
 	// HOSTS WITH KNOWN/DISCOVERED DOMAIN
-	GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.Host, error)
+	GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*core.EntityResult[*model.Host], error)
 
 	UpdateHost(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Host, error)
 }
@@ -148,31 +149,24 @@ func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *mod
 }
 
 // WITH DOMAIN
-func (r *DraphHostRepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*model.Host, error) {
+func (r *DraphHostRepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*core.EntityResult[*model.Host], error) {
 	fields := []string{
 		"uid",
-		"ip",
-		"name",
-		"net_bios_name",
-		"belongs_to_domain { uid }",
+		"host.ip",
+		"host.name",
+		"host.net_bios_name",
 		"dgraph.type",
 	}
 
-	hosts, err := dgraphutil.GetEntitiesByRelation[*model.Host](
+	return dgraphutil.GetEntitiesWithAssertions[*model.Host](
 		ctx,
 		tx,
-		"host",
-		"belongs_to_domain",
 		domainUID,
+		core.PredicateHasHost,
+		"Host",
 		fields,
+		"getDomainHosts",
 	)
-	if err != nil {
-		return nil,
-			fmt.Errorf("failed to get entities by relation: %w", err)
-	}
-
-	log.Printf("Found %d hosts for domain %s\n", len(hosts), domainUID)
-	return hosts, nil
 }
 
 // WITHOUT DOMAIN

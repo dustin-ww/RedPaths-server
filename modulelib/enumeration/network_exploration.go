@@ -230,7 +230,7 @@ func (n *NetworkExplorer) buildHost(nmapResult scan.NmapScanResult, ip string, p
 	var hostUID string
 	if domainUID != "" {
 		log.Printf("Using domain UID: %s", domainUID)
-		hostUID, err = n.services.DomainService.AddHost(ctx, domainUID, host, n.ConfigKey())
+		//hostUID, err = n.services.DomainService.AddHost(ctx, domainUID, host, n.ConfigKey())
 		if err != nil {
 			return "", fmt.Errorf("failed to add host to domain: %v", err)
 		}
@@ -327,9 +327,9 @@ func (n *NetworkExplorer) tryToBuildDomain(nmapResult scan.NmapScanResult, ip st
 
 	domainBuilder := active_directory.NewDomainBuilder()
 	domainBuilder.WithName(domain)
-	builtDomain := domainBuilder.Build()
+	//builtDomain := domainBuilder.Build()
 
-	ctx := context.Background()
+	//ctx := context.Background()
 
 	sse.NewEvent(events.DomainDiscovered).
 		WithData("timestamp", time.Now().Unix()).
@@ -337,7 +337,9 @@ func (n *NetworkExplorer) tryToBuildDomain(nmapResult scan.NmapScanResult, ip st
 		Log(n.logger)
 
 	log.Printf("PROJECT UIIDDDDDD: " + params.ProjectUID)
-	addedDomainID, err := n.services.ProjectService.AddDomain(ctx, params.ProjectUID, &builtDomain, n.ConfigKey())
+	//addedDomainID, err := n.services.ProjectService.AddDomain(ctx, params.ProjectUID, &builtDomain, n.ConfigKey())
+	//TODO: CHANGE
+	addedDomainID := ""
 	if err != nil {
 		log.Printf("failed to add domain to project: %v", err)
 		n.logger.Error("failed to create domain for host",
@@ -402,7 +404,8 @@ func (n *NetworkExplorer) buildDomainName(nmapResult scan.NmapScanResult) string
 func (n *NetworkExplorer) buildServices(host serializable.Host, hostID string) {
 	for _, port := range host.Ports.Port {
 		if port.State.State == "open" {
-			serviceBuilder := model.NewServiceBuilder()
+			// TODO: FIX
+			/*serviceBuilder := model.NewServiceBuilder()
 			serviceBuilder.WithName(port.Service.Name)
 			serviceBuilder.WithPort(port.Portid)
 			service := serviceBuilder.Build()
@@ -416,7 +419,7 @@ func (n *NetworkExplorer) buildServices(host serializable.Host, hostID string) {
 				return
 			}
 
-			log.Printf("created service in module network explorer: %s", uid)
+			log.Printf("created service in module network explorer: %s", uid)*/
 		}
 
 	}

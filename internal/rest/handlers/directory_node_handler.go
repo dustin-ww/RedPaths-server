@@ -55,6 +55,33 @@ func (h *DirectoryNodeHandler) AddUser(c *gin.Context) {
 	})
 }
 
+/*
+	func (h *DirectoryNodeHandler) GetACL(c *gin.Context) {
+		uid := c.Param("directoryNodeUID")
+		if uid == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Directory Node UID is required",
+			})
+			return
+		}
+
+		securityPrincipals, err := h.directoryNodeService.(
+			c.Request.Context(),
+			uid,
+		)
+
+		if err != nil {
+			errReturn := gin.H{
+				"error":   "Failed to retrieve security principals for provided directory node",
+				"details": err.Error(),
+			}
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, errReturn)
+		}
+
+		c.JSON(http.StatusOK, securityPrincipals)
+	}
+*/
 func (h *DirectoryNodeHandler) GetUsers(c *gin.Context) {
 	uid := c.Param("directoryNodeUID")
 	if uid == "" {
@@ -106,6 +133,92 @@ func (h *DirectoryNodeHandler) GetUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, project)
 }
 */
+
+func (h *DirectoryNodeHandler) AddChildDirectoryNode(c *gin.Context) {
+	type AddChildDirectoryNodeRequest struct {
+		Name string `json:"name" binding:"required" validate:"required"`
+	}
+
+	var request AddChildDirectoryNodeRequest
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request to add a new directory node",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	dirNodeUID := c.Param("dirNodeUID")
+
+	directoryNode := &rpad.DirectoryNode{
+		Name: request.Name,
+	}
+
+	createdDirectoryNode, err := h.directoryNodeService.AddChildDirectoryNode(
+		c.Request.Context(),
+		dirNodeUID,
+		directoryNode,
+		"user",
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to add directory node into parent directory node",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":               "success",
+		"message":              "New child directory node has been added to the directory node",
+		"added_directory_node": createdDirectoryNode,
+	})
+
+}
+
+func (h *DirectoryNodeHandler) GetChildDirectoryNodes(c *gin.Context) {
+
+	dirNodeUID := c.Param("dirNodeUID")
+
+	childDirectoryNodes, err := h.directoryNodeService.GetAllChildDirectoryNodes(
+		c.Request.Context(),
+		dirNodeUID,
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get child directory nodes",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, childDirectoryNodes)
+
+}
+
+func (h *DirectoryNodeHandler) GetDeepChildDirectoryNodes(c *gin.Context) {
+
+	dirNodeUID := c.Param("dirNodeUID")
+
+	childDirectoryNodes, err := h.directoryNodeService.GetAllChildrenRecursive(
+		c.Request.Context(),
+		dirNodeUID,
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to get child directory nodes",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, childDirectoryNodes)
+
+}
 
 func (h *DirectoryNodeHandler) UpdateDirectoryNode(c *gin.Context) {
 	//project := restcontext.Project(c)

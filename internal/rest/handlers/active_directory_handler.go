@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	active_directory2 "RedPaths-server/pkg/model/active_directory"
+	"RedPaths-server/internal/rest/requests"
+	rpad "RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/service/active_directory"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -21,49 +21,47 @@ func NewActiveDirectoryHandler(activeDirectoryService *active_directory.ActiveDi
 }
 
 func (h *ActiveDirectoryHandler) AddDomain(c *gin.Context) {
-	type AddDomainRequest struct {
-		Name string `json:"name" binding:"required" validate:"required"`
-	}
+	var request requests.AddDomainRequest
 
-	var request AddDomainRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request data",
+			"error":   "Invalid request to add a new domain",
 			"details": err.Error(),
 		})
 		return
 	}
 
-	uid := c.Param("projectUID")
+	uid := c.Param("adUID")
 
-	domain := &active_directory2.Domain{
+	domain := &rpad.Domain{
 		Name: request.Name,
 	}
 
-	_, err := h.activeDirectoryService.AddDomain(
+	createdDomain, err := h.activeDirectoryService.AddDomain(
 		c.Request.Context(),
 		uid,
 		domain,
-		"UserInput",
+		request.AssertionContext,
+		"user",
 	)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to add domain",
+			"error":   "Failed to add domain into active directory container",
 			"details": err.Error(),
 		})
-		fmt.Println(err)
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status": "Domain successfully added",
-		"name":   request.Name,
+		"status":       "success",
+		"message":      "New domain has been added to active directory",
+		"added_domain": createdDomain,
 	})
 }
 
 func (h *ActiveDirectoryHandler) GetDomains(c *gin.Context) {
-	uid := c.Param("activeDirectoryUID")
+	uid := c.Param("adUID")
 	if uid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Active Directory UID is required",
@@ -71,7 +69,7 @@ func (h *ActiveDirectoryHandler) GetDomains(c *gin.Context) {
 		return
 	}
 
-	domains, err := h.activeDirectoryService.GetDomainsByActiveDirectory(
+	domains, err := h.activeDirectoryService.GetAllDomains(
 		c.Request.Context(),
 		uid,
 	)

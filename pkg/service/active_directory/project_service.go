@@ -5,13 +5,18 @@ import (
 	rperror "RedPaths-server/internal/error"
 	"RedPaths-server/internal/repository/active_directory"
 	"RedPaths-server/internal/repository/changes"
+	"RedPaths-server/internal/repository/redpaths"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	rpad "RedPaths-server/pkg/model/active_directory"
+	"RedPaths-server/pkg/model/core"
+	utils2 "RedPaths-server/pkg/model/utils"
+	"RedPaths-server/pkg/model/utils/assertion"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/dgraph-io/dgo/v210/protos/api"
 	"gorm.io/gorm"
@@ -21,12 +26,14 @@ import (
 
 // ProjectService handles business logic for projects
 type ProjectService struct {
-	projectRepo         active_directory.ProjectRepository
-	adRepo              active_directory.ActiveDirectoryRepository
+	projectRepo active_directory.ProjectRepository
+
+	hostService         HostService
 	hostRepo            active_directory.HostRepository
 	targetRepo          active_directory.TargetRepository
 	userRepo            active_directory.UserRepository
 	activeDirectoryRepo active_directory.ActiveDirectoryRepository
+	assertionRepo       redpaths.AssertionRepository
 
 	changeRepo changes.RedPathsChangeRepository
 	db         *dgo.Dgraph
@@ -40,132 +47,103 @@ func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectSer
 		db:                  dgraphCon,
 		pdb:                 postgresCon,
 		projectRepo:         active_directory.NewDgraphProjectRepository(dgraphCon),
-		adRepo:              active_directory.NewDgraphActiveDirectoryRepository(dgraphCon),
+		activeDirectoryRepo: active_directory.NewDgraphActiveDirectoryRepository(dgraphCon),
 		hostRepo:            active_directory.NewDgraphHostRepository(dgraphCon),
 		targetRepo:          active_directory.NewDgraphTargetRepository(dgraphCon),
 		userRepo:            active_directory.NewDgraphUserRepository(dgraphCon),
-		changeRepo:          changes.NewPostgresRedPathsChangesRepository(),
-		activeDirectoryRepo: active_directory.NewDgraphActiveDirectoryRepository(dgraphCon),
+		assertionRepo:       redpaths.NewDgraphAssertionRepository(dgraphCon),
 	}, nil
 }
 
-func (s *ProjectService) AddActiveDirectory(ctx context.Context, projectUID string, incomingActiveDirectory *rpad.ActiveDirectory, actor string) (*rpad.ActiveDirectory, error) {
-	var createdAD *rpad.ActiveDirectory
-	log.Printf("[AddActiveDirectory] incomingAD.Name=%s, projectUID=%s", incomingActiveDirectory.ForestName, projectUID)
+func (s *ProjectService) AddActiveDirectory(
+	ctx context.Context,
+	assertionCtx assertion.Context,
+	projectUID string, incomingActiveDirectory *rpad.ActiveDirectory, actor string,
+) (*core.EntityResult[*rpad.ActiveDirectory], error) {
+	var result *core.EntityResult[*rpad.ActiveDirectory]
+
+	log.Printf("[AddActiveDirectory] forestName=%s, projectUID=%s, actor=%s",
+		incomingActiveDirectory.ForestName, projectUID, actor)
+
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		existingActiveDirectory, err := s.activeDirectoryRepo.FindByForestNameInProject(ctx, tx, projectUID, incomingActiveDirectory.ForestName)
+		// Check if AD already exists
+		existingAD, err := s.activeDirectoryRepo.FindByForestNameInProject(
+			ctx, tx, projectUID, incomingActiveDirectory.ForestName,
+		)
 		if err != nil {
-			return fmt.Errorf("error while checking if active directory exists: %v", err)
+			return fmt.Errorf("checking existing AD: %w", err)
 		}
 
-		if existingActiveDirectory != nil {
-			createdAD = existingActiveDirectory
-			log.Printf("[AddActiveDirectory] active directory with forest name %s already exists in project with uid: %s", incomingActiveDirectory.ForestName, projectUID)
-			return nil
-		}
-		createdAD, err = s.activeDirectoryRepo.Create(ctx, tx, incomingActiveDirectory, actor)
+		var ad *rpad.ActiveDirectory
+		var assertions []*core.Assertion
 
-		err = s.projectRepo.AddActiveDirectory(ctx, tx, projectUID, createdAD.UID)
-		if err != nil {
-			return fmt.Errorf("error while creating new active directory: %v", err)
+		if existingAD != nil {
+			// AD exists - reuse
+			ad = existingAD
+			log.Printf("[AddActiveDirectory] Reusing existing AD uid=%s", ad.UID)
+		} else {
+			// Create new AD
+			ad, err = s.activeDirectoryRepo.Create(ctx, tx, incomingActiveDirectory, actor)
+			if err != nil {
+				return fmt.Errorf("creating AD: %w", err)
+			}
+			log.Printf("[AddActiveDirectory] Created new AD uid=%s", ad.UID)
 		}
+
+		// Create assertion (even if AD existed, link might be new)
+		assertionBody := &core.Assertion{
+			Predicate:           core.PredicateHasActiveDirectory,
+			Method:              core.MethodDirectAdd,
+			Source:              actor,
+			Confidence:          assertionCtx.GetConfidence(),
+			Status:              core.StatusValidated,
+			Timestamp:           time.Now(),
+			HasDiscoveredParent: true,
+			MarkedAsHighValue:   assertionCtx.IsHighValue(),
+			Subject:             &utils2.UIDRef{UID: projectUID, Type: "Project"},
+			Object:              &utils2.UIDRef{UID: ad.UID, Type: "ActiveDirectory"},
+		}
+
+		createdAssertion, err := s.assertionRepo.Create(ctx, tx, assertionBody)
+		if err != nil {
+			return fmt.Errorf("creating assertion: %w", err)
+		}
+		assertions = append(assertions, createdAssertion)
+
+		// Link assertion to project
+		err = s.projectRepo.AddAssertion(ctx, tx, projectUID, createdAssertion.UID)
+		if err != nil {
+			return fmt.Errorf("linking assertion to project: %w", err)
+		}
+
+		// Build result
+		result = &core.EntityResult[*rpad.ActiveDirectory]{
+			Entity:     ad,
+			Assertions: assertions,
+			Metadata: &core.ResultMetadata{
+				Source:         actor,
+				ScanTimestamp:  time.Now(),
+				EntityCount:    1,
+				AssertionCount: len(assertions),
+			},
+		}
+
 		return nil
 	})
 
-	return createdAD, err
-}
-
-/*func (s *ProjectService) AddDomain(ctx context.Context, projectUID string, incomingDomain *active_directory2.Domain, actor string) (string, error) {
-	var domainUID string
-
-	log.Printf("[AddDomain] incomingDomain.Name=%s, projectUID=%s", incomingDomain.Name, projectUID)
-	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-		// check if incomingDomain already exists
-		existingDomain, err := s.getDomainByNameIfExists(ctx, tx, projectUID, incomingDomain.Name)
-		if err != nil {
-			return fmt.Errorf("incomingDomain existence check failed: %w", err)
-		}
-
-		// Build changes
-		if existingDomain != nil {
-			change := utils.BuildChange(existingDomain, incomingDomain,
-				utils.WithActor("scanner"),
-				utils.WithReason("sync"),
-			)
-
-			if change != nil {
-				err := s.changeRepo.Save(ctx, s.pdb, change)
-				if err != nil {
-					return fmt.Errorf("changeRepo save failed: %w", err)
-				}
-			}
-
-			domainUID = existingDomain.UID
-			return nil
-		}
-		return s.createAndLinkDomain(ctx, tx, incomingDomain, projectUID, &domainUID, actor)
-	})
-
-	return domainUID, err
-}*/
-
-/*func (s *ProjectService) getDomainByNameIfExists(ctx context.Context, tx *dgo.Txn, projectUID, domainName string) (*active_directory2.Domain, error) {
-	domain, err := s.domainRepo.GetByNameInProject(ctx, tx, projectUID, domainName)
 	if err != nil {
-		if errors.Is(err, rperror.ErrNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get domain by name %s: %w", domainName, err)
+		return nil, fmt.Errorf("transaction failed: %w", err)
 	}
-	log.Printf("domain with name %s already exists. Skipping!", domainName)
-	return domain, nil
+
+	return result, nil
 }
 
-func (s *ProjectService) GetDomainInProjectByUID(ctx context.Context, projectUID, domainUID string) (*active_directory2.Domain, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*active_directory2.Domain, error) {
-		domain, err := s.domainRepo.GetByUIDInProject(ctx, tx, projectUID, domainUID)
-		if err != nil {
-			if errors.Is(err, rperror.ErrNotFound) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("failed to get domain by uid %s: %w", domainUID, err)
-		}
-		return domain, nil
-	})
-}*/
-
-/*func (s *ProjectService) createAndLinkDomain(
-	ctx context.Context,
-	tx *dgo.Txn,
-	domain *active_directory2.Domain,
-	projectUID string,
-	domainUIDOut *string,
-	actor string,
-) error {
-	var err error
-
-	*domainUIDOut, err = s.domainRepo.CreateWithObject(ctx, tx, domain, actor)
-	if err != nil {
-		return fmt.Errorf("failed to create domain: %w", err)
-	}
-
-	if err := s.projectRepo.AddDomain(ctx, tx, projectUID, *domainUIDOut); err != nil {
-		return fmt.Errorf("failed to link domain: %w", err)
-	}
-
-	if err := s.domainRepo.AddToProject(ctx, tx, *domainUIDOut, projectUID); err != nil {
-		return fmt.Errorf("failed to reverse link domain to project: %w", err)
-	}
-
-	return nil
-}
-*/
-/*func (s *ProjectService) GetProjectDomains(ctx context.Context, projectUID string) ([]*active_directory2.Domain, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*active_directory2.Domain, error) {
-		return s.domainRepo.GetAllByActiveDirectoryUID(ctx, tx, projectUID)
+func (s *ProjectService) GetAllActiveDirectories(ctx context.Context, projectUID string) ([]*core.EntityResult[*rpad.ActiveDirectory], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*rpad.ActiveDirectory], error) {
+		return s.activeDirectoryRepo.GetByProjectUID(ctx, tx, projectUID)
 	})
 }
-*/
+
 // CreateTarget creates a new target and links it to a project.
 // TODO implement cidr
 func (s *ProjectService) CreateTarget(ctx context.Context, projectUID, ip, note string, cidr int) (string, error) {
@@ -226,17 +204,17 @@ func (s *ProjectService) linkTargetToProject(ctx context.Context, tx *dgo.Txn, p
 }
 
 // Create creates a new project.
-func (s *ProjectService) Create(ctx context.Context, name string) (string, error) {
-	var projectUID string
+func (s *ProjectService) Create(ctx context.Context, incomingProject *model.Project) (*model.Project, error) {
+	var createdProject *model.Project
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 		var err error
-		projectUID, err = s.projectRepo.Create(ctx, tx, name)
+		createdProject, err = s.projectRepo.Create(ctx, tx, incomingProject)
 		if err != nil {
 			return fmt.Errorf("failed to create project: %w", err)
 		}
 		return nil
 	})
-	return projectUID, err
+	return createdProject, err
 }
 
 // GetOverviewForAll retrieves overview information for all projects.
@@ -273,12 +251,6 @@ func (s *ProjectService) UpdateProject(ctx context.Context, uid, actor string, f
 
 	return db.ExecuteInTransactionWithResult[*model.Project](ctx, s.db, func(tx *dgo.Txn) (*model.Project, error) {
 		return s.projectRepo.UpdateProject(ctx, tx, uid, actor, fields)
-	})
-}
-
-func (s *ProjectService) GetAllActiveDirectories(ctx context.Context, projectUID string) ([]*rpad.ActiveDirectory, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*rpad.ActiveDirectory, error) {
-		return s.adRepo.GetByProjectUID(ctx, tx, projectUID)
 	})
 }
 

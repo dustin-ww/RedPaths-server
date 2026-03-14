@@ -5,17 +5,28 @@ import (
 	"RedPaths-server/pkg/model/utils"
 )
 
+type DirectoryNodeType string
+
+const (
+	DirectoryNodeTypeOU        DirectoryNodeType = "OU"
+	DirectoryNodeTypeContainer DirectoryNodeType = "CONTAINER"
+	DirectoryNodeTypeBuiltin   DirectoryNodeType = "BUILTIN"
+	DirectoryNodeTypeRoot      DirectoryNodeType = "ROOT"
+)
+
 type DirectoryNode struct {
 	// Internal
 	UID   string   `json:"uid,omitempty"`
 	DType []string `json:"dgraph.type,omitempty"`
 
 	// Specific
-	Name              string `json:"directory_node.name,omitempty"`
-	Description       string `json:"directory_node.description,omitempty"`
-	DistinguishedName string `json:"directory_node.distinguished_name,omitempty"`
-	NodeType          string `json:"directory_node.node_type,omitempty"` // OU | Container
-	IsBuiltin         bool   `json:"directory_node.is_builtin,omitempty"`
+	Name              string            `json:"directory_node.name,omitempty"`
+	Description       string            `json:"directory_node.description,omitempty"`
+	DistinguishedName string            `json:"directory_node.distinguished_name,omitempty"`
+	NodeType          DirectoryNodeType `json:"directory_node.node_type,omitempty"`
+	ObjectClass       string            `json:"directory_node.object_class,omitempty"`
+	IsBuiltin         bool              `json:"directory_node.is_builtin,omitempty"`
+	IsProtected       bool              `json:"directory_node.is_protected,omitempty"`
 
 	// Relations
 	Parent     *utils.UIDRef   `json:"directory_node.parent,omitempty"`

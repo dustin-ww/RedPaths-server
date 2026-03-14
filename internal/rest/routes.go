@@ -28,11 +28,12 @@ func RegisterProjectHandlers(
 	userService *active_directory.UserService,
 	dirNodeService *active_directory.DirectoryNodeService,
 	activeDirectoryService *active_directory.ActiveDirectoryService,
+	gpoService *active_directory.GPOService,
 ) {
 
 	projectHandler := handlers.NewProjectHandler(projectService)
 	logHandler := handlers.NewLogHandler(logService)
-	domainHandler := handlers.NewDomainHandler(projectService, domainService)
+	domainHandler := handlers.NewDomainHandler(projectService, dirNodeService, domainService, gpoService)
 	hostHandler := handlers.NewHostHandler(hostService)
 	serviceHandler := handlers.NewServiceHandler(serviceService)
 	userHandler := handlers.NewUserHandler(userService)
@@ -56,31 +57,46 @@ func RegisterProjectHandlers(
 			project.POST("/active-directories", projectHandler.AddActiveDirectory)
 			project.GET("/active-directories/:adUID", adHandler.Get)
 			project.PATCH("/active-directories/:adUID", adHandler.UpdateActiveDirectory)
-			project.PATCH("/active-directories/:adUID/domains", adHandler.GetDomains)
+			project.GET("/active-directories/:adUID/domains", adHandler.GetDomains)
 			project.POST("/active-directories/:adUID/domains", adHandler.AddDomain)
 
 			// --- Domains ---
 			//project.GET("/domains", adHandler.GetDomains) TODO implement
 			//project.POST("/domains", adHandler.AddDomain) TODO implement
+
 			project.PATCH("/domains/:domainUID", domainHandler.UpdateDomain)
 			project.GET("/domains/:domainUID/hosts", domainHandler.GetHosts)
 			project.POST("/domains/:domainUID/hosts", domainHandler.AddHost)
 			project.GET("/domains/:domainUID/directory-nodes", domainHandler.GetDirectoryNodes)
 			project.POST("/domains/:domainUID/directory-nodes", domainHandler.AddDirectoryNode)
+			project.GET("/domains/:domainUID/directory-nodes/all", domainHandler.GetDeepChildDirectoryNodes)
+
+			project.GET("/domains/:domainUID/gpolinks", domainHandler.GetDirectoryNodes)
 			//project.POST("/domains/:domainUID/users", domainHandler.)
 
 			// --- Directory Nodes (OU / Container) ---
-			//project.GET("/directory-nodes", dirNodeHandler.GetDirectoryNodes) TODO implement
+			/*project.GET("/directory-nodes", dirNodeHandler.GetDirectoryNodes)
+			project.GET("/directory-nodes/details")*/
 			//project.POST("/directory-nodes", dirNodeHandler.CreateDirectoryNode) TODO implement
 			/*project.GET("/directory-nodes/:dirNodeUID", dirNodeHandler.GetDirectoryNode)*/
 			project.PATCH("/directory-nodes/:dirNodeUID", dirNodeHandler.UpdateDirectoryNode)
 			project.GET("/directory-nodes/:dirNodeUID/users", dirNodeHandler.GetUsers)
+			project.POST("/directory-nodes/:dirNodeUID/users", dirNodeHandler.GetUsers)
+
+			project.POST("/directory-nodes/:dirNodeUID/childs", dirNodeHandler.AddChildDirectoryNode)
+			project.GET("/directory-nodes/:dirNodeUID/childs", dirNodeHandler.GetChildDirectoryNodes)
+
+			project.GET("/directory-nodes/:dirNodeUID/childs/all", dirNodeHandler.GetDeepChildDirectoryNodes)
+
+			//TODO IMPLEMENT
+			//	project.GET("/directory-nodes/:dirNodeUID/acls", dirNodeHandler.GetACLs)
 
 			// --- Hosts ---
 			project.GET("/hosts", projectHandler.GetHosts)
 			project.POST("/hosts", hostHandler.CreateHost)
 			project.PATCH("/hosts/:hostUID", hostHandler.UpdateHost)
 			project.GET("/hosts/:hostUID/services", serviceHandler.GetServices)
+			project.POST("/hosts/:hostUID/services", hostHandler.AddService)
 			project.PATCH("/services/:serviceUID", serviceHandler.UpdateService)
 
 			// --- Users ---

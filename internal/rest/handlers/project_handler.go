@@ -2,7 +2,10 @@ package handlers
 
 import (
 	restcontext "RedPaths-server/internal/rest/context"
+	"RedPaths-server/internal/rest/requests"
+	"RedPaths-server/pkg/model"
 	rpadmodel "RedPaths-server/pkg/model/active_directory"
+	"RedPaths-server/pkg/model/utils/assertion"
 	"RedPaths-server/pkg/service/active_directory"
 	"fmt"
 	"log"
@@ -166,7 +169,11 @@ func (h *ProjectHandler) CreateProject(c *gin.Context) {
 		return
 	}
 
-	projectUID, err := h.projectService.Create(c.Request.Context(), request.Name)
+	project := &model.Project{
+		Name: request.Name,
+	}
+
+	projectUID, err := h.projectService.Create(c.Request.Context(), project)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -179,6 +186,7 @@ func (h *ProjectHandler) CreateProject(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"uid":     projectUID,
 		"message": "Project created successfully",
+		"created": project,
 	})
 }
 
@@ -211,11 +219,8 @@ func (h *ProjectHandler) UpdateProject(c *gin.Context) {
 
 // AddActiveDirectory adds a new Active Directory forest to a project.
 func (h *ProjectHandler) AddActiveDirectory(c *gin.Context) {
-	type CreateActiveDirectory struct {
-		ForestName string `json:"forest_name" binding:"required"`
-	}
 
-	var request CreateActiveDirectory
+	var request requests.CreateActiveDirectory
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -225,12 +230,19 @@ func (h *ProjectHandler) AddActiveDirectory(c *gin.Context) {
 		return
 	}
 
+	ac := assertion.FromRequest(request.AssertionContext)
+
 	activeDirectory := &rpadmodel.ActiveDirectory{
 		ForestName: request.ForestName,
 	}
 
 	projectUid := c.Param("projectUID")
-	createdAD, err := h.projectService.AddActiveDirectory(c.Request.Context(), projectUid, activeDirectory, "UserInput")
+	createdAD, err := h.projectService.AddActiveDirectory(
+		c.Request.Context(),
+		ac,
+		projectUid,
+		activeDirectory,
+		"UserInput")
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -241,9 +253,9 @@ func (h *ProjectHandler) AddActiveDirectory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"status":       "success",
-		"message":      "New active directory has been created",
-		"created_user": createdAD,
+		"status":                   "success",
+		"message":                  "New active directory has been created",
+		"created_active_directory": createdAD,
 	})
 }
 

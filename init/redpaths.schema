@@ -1,3 +1,6 @@
+# ========================================
+# CORE TIMESTAMPS & AUDIT FIELDS
+# ========================================
 created_at: datetime @index(hour) .
 modified_at: datetime @index(hour) .
 discovered_at: datetime @index(hour) .
@@ -7,33 +10,71 @@ validated_by: string .
 last_seen_at: datetime @index(hour) .
 last_seen_by: string .
 
+# ========================================
+# ASSERTION - Zentrale Beziehungs-Entity
+# @reverse macht Kanten in Ratel sichtbar!
+# ========================================
+assertion.predicate: string @index(exact, term) .
+assertion.method: string @index(exact, term) .
+assertion.source: string @index(term) .
+assertion.confidence: float @index(float) .
+assertion.status: string @index(exact, term) .
+assertion.timestamp: datetime @index(hour) .
+assertion.note: string .
+assertion.high_value_marked: bool @index(bool) .
+assertion.has_discovered_parent: bool @index(bool) .
+
+# Diese beiden machen die Kanten in Ratel sichtbar
+assertion.subject: uid @reverse .
+assertion.object: uid @reverse .
+
+type Assertion {
+  assertion.predicate
+  assertion.method
+  assertion.source
+  assertion.confidence
+  assertion.status
+  assertion.timestamp
+  assertion.note
+  assertion.high_value_marked
+  assertion.has_discovered_parent
+  assertion.subject
+  assertion.object
+}
+
+# ========================================
+# PROJECT
+# ========================================
 project.name: string @index(exact, term) .
-project.tags: [string] .
+project.tags: [string] @index(term) .
 project.description: string .
-project.has_ad: [uid] @reverse .
-project.has_unknown_domain_host: [uid] @reverse .
-project.has_target: [uid] @reverse .
+
+# Optional: Direkter Index auf Assertions für Performance
+project.has_assertion: [uid] @reverse .
 
 type Project {
   project.name
   project.tags
   project.description
-  project.has_ad
-  project.has_unknown_domain_host
-  project.has_target
+  project.has_assertion
   created_at
   modified_at
   dgraph.type
 }
+# Via Assertions (Predicate-Namen):
+# - "part_of_project" (AD → Project)
+# - "has_target" (Project → Target)
+# - "has_unknown_host" (Project → Host)
 
+# ========================================
+# ACTIVE DIRECTORY
+# ========================================
 active_directory.forest_name: string @index(exact, term) .
-active_directory.forest_functional_level: string .
-active_directory.has_domain: [uid] @reverse .
+active_directory.forest_functional_level: string @index(term) .
 
 type ActiveDirectory {
   active_directory.forest_name
   active_directory.forest_functional_level
-  active_directory.has_domain
   created_at
   modified_at
   validated_at
@@ -42,24 +83,25 @@ type ActiveDirectory {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_domain" (AD → Domain)
+# - "part_of_project" (AD → Project)
 
+# ========================================
+# DOMAIN
+# ========================================
 domain.name: string @index(exact, term) .
 domain.description: string .
 domain.dns_name: string @index(exact) @upsert .
 domain.netbios_name: string @index(exact) .
 domain.domain_guid: string @index(exact) @upsert .
 domain.domain_sid: string @index(exact) @upsert .
-domain.domain_functional_level: string .
-domain.forest_functional_level: string .
+domain.domain_functional_level: string @index(term) .
+domain.forest_functional_level: string @index(term) .
 domain.fsmo_role_owners: [string] .
 domain.linked_gpos: [string] .
 domain.default_containers: [string] .
-domain.contains_dir_nodes: [uid] @reverse .
-domain.has_principals: [uid] @reverse .
-domain.has_trust: [uid] @reverse .
 domain.has_acl: uid @reverse .
-domain.has_gpo_link: [uid] @reverse .
-domain.security_policy: uid @reverse .
 
 type Domain {
   domain.name
@@ -73,12 +115,7 @@ type Domain {
   domain.fsmo_role_owners
   domain.linked_gpos
   domain.default_containers
-  domain.contains_dir_nodes
-  domain.has_principals
-  domain.has_trust
   domain.has_acl
-  domain.has_gpo_link
-  domain.security_policy
   created_at
   modified_at
   validated_at
@@ -87,17 +124,25 @@ type Domain {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "contains_dir_node" (Domain → DirectoryNode)
+# - "has_principal" (Domain → User/Group/Computer)
+# - "has_trust" (Domain → Trust)
+# - "has_acl" (Domain → ACL)
+# - "has_gpo_link" (Domain → GPOLink)
+# - "has_security_policy" (Domain → SecurityPolicy)
 
-trust.trust_type: string @index(exact) .
-trust.direction: string @index(exact) .
+# ========================================
+# TRUST
+# ========================================
+trust.trust_type: string @index(exact, term) .
+trust.direction: string @index(exact, term) .
 trust.is_transitive: bool @index(bool) .
-trust.trusted_domain: uid @reverse .
 
 type Trust {
   trust.trust_type
   trust.direction
   trust.is_transitive
-  trust.trusted_domain
   created_at
   modified_at
   validated_at
@@ -106,7 +151,13 @@ type Trust {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "trusts" (Trust → Domain) - das trusted_domain
+# - "has_trust" (Domain → Trust) - umgekehrt
 
+# ========================================
+# SECURITY POLICY
+# ========================================
 security_policy.min_pwd_length: int .
 security_policy.pwd_history_length: int .
 security_policy.lockout_threshold: int .
@@ -125,16 +176,18 @@ type SecurityPolicy {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_security_policy" (Domain → SecurityPolicy)
 
+# ========================================
+# DIRECTORY NODE (OU, Container)
+# ========================================
 directory_node.name: string @index(exact, term) .
 directory_node.description: string .
 directory_node.distinguished_name: string @index(exact) @upsert .
-directory_node.node_type: string @index(exact) .
+directory_node.node_type: string @index(exact, term) .
 directory_node.is_builtin: bool @index(bool) .
-directory_node.parent: uid @reverse .
-directory_node.locates: [uid] @reverse .
 directory_node.has_acl: uid @reverse .
-directory_node.has_gpo_link: [uid] @reverse .
 
 type DirectoryNode {
   directory_node.name
@@ -142,10 +195,7 @@ type DirectoryNode {
   directory_node.distinguished_name
   directory_node.node_type
   directory_node.is_builtin
-  directory_node.parent
-  directory_node.locates
   directory_node.has_acl
-  directory_node.has_gpo_link
   created_at
   modified_at
   validated_at
@@ -154,14 +204,22 @@ type DirectoryNode {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "parent_of" / "child_of" (DirectoryNode → DirectoryNode) - OU-Hierarchie
+# - "locates" (DirectoryNode → Principal) - wo liegt das Objekt
+# - "has_acl" (DirectoryNode → ACL)
+# - "has_gpo_link" (DirectoryNode → GPOLink)
 
+# ========================================
+# SECURITY PRINCIPAL (Base Attributes)
+# ========================================
 security_principal.name: string @index(exact, term) .
 security_principal.sid: string @index(exact) @upsert .
 security_principal.description: string .
-security_principal.has_capability: [uid] @reverse .
-security_principal.owns: [uid] @reverse .
-security_principal.has_acl: uid @reverse .
 
+# ========================================
+# USER
+# ========================================
 user.sam_account_name: string @index(exact) .
 user.upn: string @index(exact) .
 user.is_disabled: bool @index(bool) .
@@ -172,21 +230,18 @@ user.pwd_last_set: datetime @index(hour) .
 user.bad_pwd_count: int .
 user.allowed_to_delegate: bool @index(bool) .
 user.has_spn: bool @index(bool) .
-user.has_session: [uid] @reverse .
-user.kerberoastable: bool .
-user.asrep_roastable: bool .
-user.risk_score: int .
+user.kerberoastable: bool @index(bool) .
+user.asrep_roastable: bool @index(bool) .
+user.risk_score: int @index(int) .
 user.risk_reasons: [string] .
-user.is_local_admin: bool .
-user.is_domain_admin: bool .
+user.is_local_admin: bool @index(bool) .
+user.is_domain_admin: bool @index(bool) .
+user.has_acl: uid @reverse .
 
 type User {
   security_principal.name
   security_principal.sid
   security_principal.description
-  security_principal.has_capability
-  security_principal.owns
-  security_principal.has_acl
   user.sam_account_name
   user.upn
   user.is_disabled
@@ -197,13 +252,12 @@ type User {
   user.bad_pwd_count
   user.allowed_to_delegate
   user.has_spn
-  user.has_session
-  group.member_of
   user.kerberoastable
   user.asrep_roastable
   user.risk_score
   user.risk_reasons
   user.is_local_admin
+  user.has_acl
   user.is_domain_admin
   created_at
   modified_at
@@ -213,27 +267,32 @@ type User {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_capability" (User → Capability)
+# - "owns" (User → Any)
+# - "has_acl" (User → ACL)
+# - "has_session" (User → Session)
+# - "member_of" (User → Group)
+# - "located_in" (User → DirectoryNode)
 
-group.group_scope: string @index(exact) .
-group.group_type: string @index(exact) .
+# ========================================
+# GROUP
+# ========================================
+group.group_scope: string @index(exact, term) .
+group.group_type: string @index(exact, term) .
 group.is_privileged: bool @index(bool) .
 group.is_builtin: bool @index(bool) .
-group.privileges: [string] .
+group.privileges: [string] @index(term) .
 group.can_dcsync: bool @index(bool) .
 group.can_rdp: bool @index(bool) .
 group.can_logon_locally: bool @index(bool) .
 group.risk_score: int @index(int) .
 group.risk_reasons: [string] .
-group.has_member: [uid] @reverse .
-group.member_of: [uid] @reverse .
 
 type Group {
   security_principal.name
   security_principal.sid
   security_principal.description
-  security_principal.has_capability
-  security_principal.owns
-  security_principal.has_acl
   group.group_scope
   group.group_type
   group.is_privileged
@@ -244,8 +303,6 @@ type Group {
   group.can_logon_locally
   group.risk_score
   group.risk_reasons
-  group.has_member
-  group.member_of
   created_at
   modified_at
   validated_at
@@ -254,22 +311,25 @@ type Group {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_member" (Group → User/Group/Computer)
+# - "member_of" (Group → Group) - nested groups
+# - "has_capability" (Group → Capability)
+# - "owns" (Group → Any)
+# - "has_acl" (Group → ACL)
+# - "located_in" (Group → DirectoryNode)
 
-service_account.has_spn: [uid] @reverse .
-
+# ========================================
+# SERVICE ACCOUNT
+# ========================================
 type ServiceAccount {
   security_principal.name
   security_principal.sid
   security_principal.description
-  security_principal.has_capability
-  security_principal.owns
-  security_principal.has_acl
   user.sam_account_name
   user.upn
   user.is_disabled
   user.is_locked
-  service_account.has_spn
-  group.member_of
   created_at
   modified_at
   validated_at
@@ -278,26 +338,27 @@ type ServiceAccount {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_spn" (ServiceAccount → SPN)
+# - "member_of" (ServiceAccount → Group)
+# - "has_capability" (ServiceAccount → Capability)
+# - "owns" (ServiceAccount → Any)
+# - "has_acl" (ServiceAccount → ACL)
 
+# ========================================
+# COMPUTER
+# ========================================
 computer.hostname: string @index(exact, term) .
 computer.is_domain_controller: bool @index(bool) .
-computer.represents: uid @reverse .
-computer.has_delegation: uid @reverse .
-computer.has_spn: [uid] @reverse .
+computer.has_acl: uid @reverse .
 
 type Computer {
   security_principal.name
   security_principal.sid
   security_principal.description
-  security_principal.has_capability
-  security_principal.owns
-  security_principal.has_acl
   computer.hostname
   computer.is_domain_controller
-  computer.represents
-  computer.has_delegation
-  computer.has_spn
-  group.member_of
+  computer.has_acl
   created_at
   modified_at
   validated_at
@@ -306,17 +367,28 @@ type Computer {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "represents" (Computer → Host) - AD-Objekt → physischer Host
+# - "has_delegation" (Computer → DelegationConfig)
+# - "has_spn" (Computer → SPN)
+# - "member_of" (Computer → Group)
+# - "has_capability" (Computer → Capability)
+# - "owns" (Computer → Any)
+# - "has_acl" (Computer → ACL)
+# - "located_in" (Computer → DirectoryNode)
 
-host.name: string .
+# ========================================
+# HOST (Physical/Network)
+# ========================================
+host.name: string @index(term) .
 host.hostname: string @index(exact, term) .
 host.description: string .
-host.ip: string .
-host.is_domain_controller: bool .
-host.distinguished_name: string .
-host.dns_host_name: string .
-host.operating_system: string .
-host.operating_system_version: string .
-host.runs: [uid] @reverse .
+host.ip: string @index(exact) .
+host.is_domain_controller: bool @index(bool) .
+host.distinguished_name: string @index(exact) .
+host.dns_host_name: string @index(exact) .
+host.operating_system: string @index(term) .
+host.operating_system_version: string @index(term) .
 host.has_acl: uid @reverse .
 
 type Host {
@@ -328,7 +400,6 @@ type Host {
   host.dns_host_name
   host.operating_system
   host.operating_system_version
-  host.runs
   host.has_acl
   created_at
   modified_at
@@ -338,9 +409,16 @@ type Host {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "runs" (Host → Service)
+# - "has_acl" (Host → ACL)
+# - "hosts_session" (Host → Session)
+# - "represented_by" (Host → Computer)
 
+# ========================================
+# SERVICE
+# ========================================
 service.name: string @index(exact, term) .
-service.description: string .
 service.port: string @index(exact) .
 service.description: string .
 
@@ -356,9 +434,14 @@ type Service {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "runs_on" (Service → Host)
 
+# ========================================
+# SPN (Service Principal Name)
+# ========================================
 spn.spn: string @index(exact) @upsert .
-spn.service_type: string @index(exact) .
+spn.service_type: string @index(exact, term) .
 
 type SPN {
   spn.spn
@@ -371,17 +454,20 @@ type SPN {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_spn" (ServiceAccount/Computer → SPN)
 
-credential.type: string @index(exact) .
+# ========================================
+# CREDENTIAL (Base)
+# ========================================
+credential.type: string @index(exact, term) .
 credential.is_usable: bool @index(bool) .
 credential.lifetime: int .
-credential.usable_on: [uid] @reverse .
 
 type Credential {
   credential.type
   credential.is_usable
   credential.lifetime
-  credential.usable_on
   created_at
   modified_at
   validated_at
@@ -390,16 +476,21 @@ type Credential {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "usable_on" (Credential → Host/Principal)
+# - "exposed_by" (Credential → Session)
 
-kerberos_ticket.ticket_type: string @index(exact) .
-kerberos_ticket.spn: string .
-kerberos_ticket.delegation_type: string .
+# ========================================
+# KERBEROS TICKET
+# ========================================
+kerberos_ticket.ticket_type: string @index(exact, term) .
+kerberos_ticket.spn: string @index(exact) .
+kerberos_ticket.delegation_type: string @index(term) .
 
 type KerberosTicket {
   credential.type
   credential.is_usable
   credential.lifetime
-  credential.usable_on
   kerberos_ticket.ticket_type
   kerberos_ticket.spn
   kerberos_ticket.delegation_type
@@ -411,14 +502,18 @@ type KerberosTicket {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "usable_on" (Ticket → Host/Principal)
 
-ntlm_hash.hash: string .
+# ========================================
+# NTLM HASH
+# ========================================
+ntlm_hash.hash: string @index(exact) .
 
 type NTLMHash {
   credential.type
   credential.is_usable
   credential.lifetime
-  credential.usable_on
   ntlm_hash.hash
   created_at
   modified_at
@@ -428,8 +523,13 @@ type NTLMHash {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "usable_on" (Hash → Host/Principal)
 
-delegation_config.delegation_type: string @index(exact) .
+# ========================================
+# DELEGATION CONFIG
+# ========================================
+delegation_config.delegation_type: string @index(exact, term) .
 delegation_config.allowed_to_delegate_to: [string] .
 
 type DelegationConfig {
@@ -443,19 +543,20 @@ type DelegationConfig {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_delegation" (Computer → DelegationConfig)
 
-session.session_type: string @index(exact) .
+# ========================================
+# SESSION
+# ========================================
+session.session_type: string @index(exact, term) .
 session.is_active: bool @index(bool) .
 session.login_time: datetime @index(hour) .
-session.on_host: uid @reverse .
-session.exposes: [uid] @reverse .
 
 type Session {
   session.session_type
   session.is_active
   session.login_time
-  session.on_host
-  session.exposes
   created_at
   modified_at
   validated_at
@@ -464,26 +565,37 @@ type Session {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "on_host" / "hosts_session" (Session → Host)
+# - "exposes" (Session → Credential)
+# - "authenticated_as" (Session → User)
 
+# ========================================
+# CAPABILITY
+# ========================================
 capability.name: string @index(exact, term) .
-capability.scope: string @index(exact) .
+capability.scope: string @index(exact, term) .
 capability.risk_level: int @index(int) .
-capability.applies_to: [uid] @reverse .
 
 type Capability {
   capability.name
   capability.scope
   capability.risk_level
-  capability.applies_to
   dgraph.type
 }
+# Via Assertions:
+# - "applies_to" (Capability → Any)
+# - "has_capability" (Principal → Capability)
+# - "grants_capability" (ACE/GPO → Capability)
 
-acl.owner: uid @reverse .
-acl.contains: [uid] @reverse .
+# ========================================
+# ACL (Access Control List)
+# ========================================
+
+acl.name: string @index(exact, term) .
 
 type ACL {
-  acl.owner
-  acl.contains
+  acl.name
   created_at
   modified_at
   validated_at
@@ -492,21 +604,22 @@ type ACL {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "owned_by" (ACL → Principal)
+# - "contains" (ACL → ACE)
+# - "has_acl" (Any → ACL)
 
-ace.access_type: string @index(exact) .
+# ========================================
+# ACE (Access Control Entry)
+# ========================================
+ace.access_type: string @index(exact, term) .
 ace.inherited: bool @index(bool) .
-ace.applies_to: string .
-ace.has_right: uid @reverse .
-ace.granted_to: uid @reverse .
-ace.derives: [uid] @reverse .
+ace.applies_to: string @index(term) .
 
 type ACE {
   ace.access_type
   ace.inherited
   ace.applies_to
-  ace.has_right
-  ace.granted_to
-  ace.derives
   created_at
   modified_at
   validated_at
@@ -515,31 +628,38 @@ type ACE {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "has_right" (ACE → ADRight)
+# - "granted_to" (ACE → Principal)
+# - "derives" (ACE → Capability)
+# - "contained_in" (ACE → ACL)
 
+# ========================================
+# AD RIGHT
+# ========================================
 ad_right.name: string @index(exact) @upsert .
-ad_right.category: string @index(exact) .
+ad_right.category: string @index(exact, term) .
 ad_right.risk_level: int @index(int) .
-ad_right.implies: [uid] @reverse .
 
 type ADRight {
   ad_right.name
   ad_right.category
   ad_right.risk_level
-  ad_right.implies
   dgraph.type
 }
+# Via Assertions:
+# - "implies" (ADRight → Capability)
 
+# ========================================
+# GPO (Group Policy Object)
+# ========================================
 gpo.name: string @index(exact, term) .
 gpo.description: string .
-gpo.contains: [uid] @reverse .
-gpo.grants: [uid] @reverse .
 gpo.has_acl: uid @reverse .
 
 type GPO {
   gpo.name
   gpo.description
-  gpo.contains
-  gpo.grants
   gpo.has_acl
   created_at
   modified_at
@@ -549,9 +669,16 @@ type GPO {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "contains" (GPO → GPOSetting)
+# - "grants" (GPO → Capability)
+# - "has_acl" (GPO → ACL)
 
-gpo_setting.setting_type: string @index(exact) .
-gpo_setting.value: string .
+# ========================================
+# GPO SETTING
+# ========================================
+gpo_setting.setting_type: string @index(exact, term) .
+gpo_setting.value: string @index(term) .
 
 type GPOSetting {
   gpo_setting.setting_type
@@ -564,17 +691,20 @@ type GPOSetting {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "contained_in" (GPOSetting → GPO)
 
+# ========================================
+# GPO LINK
+# ========================================
 gpo_link.link_order: int .
 gpo_link.is_enforced: bool @index(bool) .
 gpo_link.is_enabled: bool @index(bool) .
-gpo_link.links_to: uid @reverse .
 
 type GPOLink {
   gpo_link.link_order
   gpo_link.is_enforced
   gpo_link.is_enabled
-  gpo_link.links_to
   created_at
   modified_at
   validated_at
@@ -583,16 +713,18 @@ type GPOLink {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "links_to" (GPOLink → GPO)
+# - "has_gpo_link" (Domain/DirectoryNode → GPOLink)
 
+# ========================================
+# ATTACK
+# ========================================
 attack.attack_id: string @index(exact) @upsert .
 attack.name: string @index(exact, term) .
-attack.cost: int .
-attack.noise: float .
-attack.reliability: float .
-attack.requires: [uid] @reverse .
-attack.grants: [uid] @reverse .
-attack.targets: [uid] @reverse .
-attack.produces: [uid] @reverse .
+attack.cost: int @index(int) .
+attack.noise: float @index(float) .
+attack.reliability: float @index(float) .
 
 type Attack {
   attack.attack_id
@@ -600,13 +732,17 @@ type Attack {
   attack.cost
   attack.noise
   attack.reliability
-  attack.requires
-  attack.grants
-  attack.targets
-  attack.produces
   dgraph.type
 }
+# Via Assertions:
+# - "requires" (Attack → Capability/Credential)
+# - "grants" (Attack → Capability)
+# - "targets" (Attack → Principal/Host)
+# - "produces" (Attack → Credential)
 
+# ========================================
+# ATTACK RESULT
+# ========================================
 attack_result.success: bool @index(bool) .
 attack_result.noise_generated: float .
 
@@ -616,67 +752,49 @@ type AttackResult {
   created_at
   dgraph.type
 }
+# Via Assertions:
+# - "executed_attack" (AttackResult → Attack)
+# - "compromised" (AttackResult → Principal/Host/Credential)
 
+# ========================================
+# ATTACK STATE (Simulation State)
+# ========================================
 attack_state.timestamp: datetime @index(hour) .
 attack_state.total_noise: float .
 attack_state.total_cost: int .
-attack_state.history: [uid] @reverse .
-attack_state.active_capabilities: [uid] @reverse .
 
 type AttackState {
   attack_state.timestamp
   attack_state.total_noise
   attack_state.total_cost
-  attack_state.history
-  attack_state.active_capabilities
   dgraph.type
 }
+# Via Assertions:
+# - "has_history" (AttackState → AttackResult)
+# - "has_capability" (AttackState → Capability)
 
+# ========================================
+# COMPROMISE RECORD
+# ========================================
 compromise_record.compromised_at: datetime @index(hour) .
 compromise_record.noise_generated: float .
 compromise_record.cost: int .
-compromise_record.compromised_principal: uid @reverse .
-compromise_record.compromised_host: uid @reverse .
-compromise_record.via_attack: uid @reverse .
-compromise_record.parent_compromise: uid @reverse .
 
 type CompromiseRecord {
   compromise_record.compromised_at
   compromise_record.noise_generated
   compromise_record.cost
-  compromise_record.compromised_principal
-  compromise_record.compromised_host
-  compromise_record.via_attack
-  compromise_record.parent_compromise
   dgraph.type
 }
+# Via Assertions:
+# - "compromised_principal" (CompromiseRecord → Principal)
+# - "compromised_host" (CompromiseRecord → Host)
+# - "via_attack" (CompromiseRecord → Attack)
+# - "parent_of" (CompromiseRecord → CompromiseRecord) - Attack-Chain
 
-assertion.predicate: string @index(term) .
-assertion.method: string @index(term) .
-assertion.source: string @index(term) .
-assertion.confidence: float .
-assertion.status: string @index(term) .
-assertion.timestamp: datetime @index(year) .
-assertion.note: string .
-assertion.high_value_marked: bool .
-
-assertion.subject: uid @reverse .
-assertion.object: uid @reverse .
-
-type Assertion {
-  assertion.note
-  assertion.predicate
-  assertion.method
-  assertion.source
-  assertion.confidence
-  assertion.status
-  assertion.timestamp
-  assertion.subject
-  assertion.object
-  assertion.high_value_marked
-}
-
-
+# ========================================
+# TARGET (Red Team Target)
+# ========================================
 target.ip: string @index(exact) .
 target.cidr: int .
 target.note: string .
@@ -695,3 +813,6 @@ type Target {
   discovered_by
   dgraph.type
 }
+# Via Assertions:
+# - "targets" (Target → Host)
+# - "has_target" (Project → Target)

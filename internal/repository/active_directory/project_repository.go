@@ -10,13 +10,12 @@ import (
 	"time"
 
 	"github.com/dgraph-io/dgo/v210"
-	"github.com/dgraph-io/dgo/v210/protos/api"
 )
 
 // ProjectRepository defines operations for project data access
 type ProjectRepository interface {
 	// CRUD
-	Create(ctx context.Context, tx *dgo.Txn, name string) (string, error)
+	Create(ctx context.Context, tx *dgo.Txn, incomingProject *model.Project) (*model.Project, error)
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Project, error)
 	GetAll(ctx context.Context, tx *dgo.Txn) ([]*model.Project, error)
 	// TODO: Move into target repo
@@ -26,6 +25,7 @@ type ProjectRepository interface {
 
 	// Relations
 	AddActiveDirectory(ctx context.Context, tx *dgo.Txn, projectUID, activeDirectoryUID string) error
+	AddAssertion(ctx context.Context, tx *dgo.Txn, projectUID, assertionUID string) error
 
 	AddTarget(ctx context.Context, tx *dgo.Txn, projectUID, targetUID string) error
 	AddHostWithUnknownDomain(ctx context.Context, tx *dgo.Txn, projectUID, hostUID string) error
@@ -51,29 +51,18 @@ func (r *DgraphProjectRepository) AddActiveDirectory(ctx context.Context, tx *dg
 	return nil
 }
 
+func (r *DgraphProjectRepository) AddAssertion(ctx context.Context, tx *dgo.Txn, projectUID, assertionUID string) error {
+	relationName := "has_assertion"
+	err := dgraphutil.AddRelation(ctx, tx, projectUID, assertionUID, relationName)
+	if err != nil {
+		return fmt.Errorf("error while linking red paths assertion %s to project %s with relation %s", assertionUID, projectUID, relationName)
+	}
+	return nil
+}
+
 // Create adds a new project to the database
-func (r *DgraphProjectRepository) Create(ctx context.Context, tx *dgo.Txn, name string) (string, error) {
-	projectData := map[string]interface{}{
-		"name":        name,
-		"dgraph.type": "Project",
-		"created_at":  time.Now(),
-	}
-
-	jsonData, err := json.Marshal(projectData)
-	if err != nil {
-		return "", fmt.Errorf("marshal error: %w", err)
-	}
-
-	mu := &api.Mutation{
-		SetJson: jsonData,
-	}
-
-	assigned, err := tx.Mutate(ctx, mu)
-	if err != nil {
-		return "", fmt.Errorf("mutation error: %w", err)
-	}
-
-	return assigned.Uids["blank-0"], nil
+func (r *DgraphProjectRepository) Create(ctx context.Context, tx *dgo.Txn, incomingProject *model.Project) (*model.Project, error) {
+	return dgraphutil.CreateEntity(ctx, tx, "Project", incomingProject)
 }
 
 // Get retrieves a project by UID
@@ -82,18 +71,15 @@ func (r *DgraphProjectRepository) Get(ctx context.Context, tx *dgo.Txn, uid stri
         query Project($uid: string) {
             project(func: uid($uid)) {
                 uid
-                name
-                tags
-                created_at
-                modified_at
-                description
-                has_ad {
-                    uid
-                }
+                project.name
+                project.tags
+                project.created_at
+                project.modified_at
+                project.description
                 has_target {
                     uid
-                    ip_range
-                    name
+                    target.ip_range
+                    target.name
                 }
             }
         }
@@ -109,10 +95,10 @@ func (r *DgraphProjectRepository) GetTargets(ctx context.Context, tx *dgo.Txn, u
                 uid
                 has_target {
                     uid
-                    ip
-					cidr
-					note
-                    name
+                    target.ip
+					target.cidr
+					target.note
+                    target.name
                     dgraph.type
                 }
             }
@@ -153,9 +139,9 @@ func (r *DgraphProjectRepository) GetTargets(ctx context.Context, tx *dgo.Txn, u
 func (r *DgraphProjectRepository) GetAll(ctx context.Context, tx *dgo.Txn) ([]*model.Project, error) {
 	fields := []string{
 		"uid",
-		"name",
-		"created_at",
-		"description",
+		"project.name",
+		"project.created_at",
+		"project.description",
 		"dgraph.type",
 	}
 	return dgraphutil.GetAllEntities[*model.Project](ctx, tx, "Project", fields, 0, 0)
