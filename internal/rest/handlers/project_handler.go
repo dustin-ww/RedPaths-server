@@ -284,6 +284,54 @@ func (h *ProjectHandler) GetActiveDirectories(c *gin.Context) {
 	c.JSON(http.StatusOK, activeDirectories)
 }
 
+func (h *ProjectHandler) GetDirectoryNodes(c *gin.Context) {
+	uid := c.Param("projectUID")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Project UID is required",
+		})
+		return
+	}
+
+	directoryNodes, err := h.projectService.GetAllDirectoryNodes(c.Request.Context(), uid)
+
+	if err != nil {
+		errReturn := gin.H{
+			"error":   "Failed to retrieve directory nodes",
+			"details": err.Error(),
+		}
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, errReturn)
+		return
+	}
+
+	c.JSON(http.StatusOK, directoryNodes)
+}
+
+func (h *ProjectHandler) GetDomains(c *gin.Context) {
+	uid := c.Param("projectUID")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Project UID is required",
+		})
+		return
+	}
+
+	domains, err := h.projectService.GetAllDomains(c.Request.Context(), uid)
+
+	if err != nil {
+		errReturn := gin.H{
+			"error":   "Failed to retrieve domainss",
+			"details": err.Error(),
+		}
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, errReturn)
+		return
+	}
+
+	c.JSON(http.StatusOK, domains)
+}
+
 // GetHosts retrieves all hosts for a project.
 func (h *ProjectHandler) GetHosts(c *gin.Context) {
 	uid := c.Param("projectUID")
@@ -299,6 +347,30 @@ func (h *ProjectHandler) GetHosts(c *gin.Context) {
 	if err != nil {
 		errReturn := gin.H{
 			"error":   "Failed to retrieve hosts",
+			"details": err.Error(),
+		}
+		c.JSON(http.StatusInternalServerError, errReturn)
+		return
+	}
+
+	c.JSON(http.StatusOK, domains)
+}
+
+// GetHosts retrieves all hosts for a project.
+func (h *ProjectHandler) GetServices(c *gin.Context) {
+	uid := c.Param("projectUID")
+	if uid == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Project UID is required",
+		})
+		return
+	}
+
+	domains, err := h.projectService.GetServicesByProject(c.Request.Context(), uid)
+
+	if err != nil {
+		errReturn := gin.H{
+			"error":   "Failed to retrieve services",
 			"details": err.Error(),
 		}
 		c.JSON(http.StatusInternalServerError, errReturn)

@@ -3,13 +3,11 @@ package middleware
 import (
 	"RedPaths-server/pkg/service/active_directory"
 
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 )
 
 func HostContext(projectService *active_directory.ProjectService) gin.HandlerFunc {
-	return func(c *gin.Context) {
+	/*	return func(c *gin.Context) {
 		projectUID := c.Param("projectUID")
 		hostUID := c.Param("hostUID")
 
@@ -24,5 +22,6 @@ func HostContext(projectService *active_directory.ProjectService) gin.HandlerFun
 
 		c.Set("host", host)
 		c.Next()
-	}
+	}*/
+	return nil
 }

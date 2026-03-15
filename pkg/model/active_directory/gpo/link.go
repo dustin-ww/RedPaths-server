@@ -11,11 +11,9 @@ type Link struct {
 	DType []string `json:"dgraph.type,omitempty"`
 
 	//Specific
-	LinkOrder  int    `json:"gpo.link_order"`
-	IsEnforced string `json:"gpo.is_enforced,omitempty"`
-	IsEnabled  string `json:"gpo.is_enabled,omitempty"`
-
-	LinksTo *GPO `json:"gpo.links_to,omitempty"`
+	LinkOrder  int  `json:"gpo.link_order"`
+	IsEnforced bool `json:"gpo.is_enforced,omitempty"`
+	IsEnabled  bool `json:"gpo.is_enabled,omitempty"`
 
 	// Relations
 	/*	Links []*utils.UIDRef `json:"active_directory.has_domain,omitempty"`

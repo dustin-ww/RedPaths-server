@@ -4,6 +4,7 @@ import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	"context"
 	"time"
 
@@ -20,7 +21,9 @@ type DirectoryNodeRepository interface {
 	// Finds
 	FindByDistinguishedNameInDomain(ctx context.Context, tx *dgo.Txn, domainUID string, dsName string) (*active_directory.DirectoryNode, error)
 
-	GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*core.EntityResult[*active_directory.DirectoryNode], error)
+	GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*res.EntityResult[*active_directory.DirectoryNode], error)
+
+	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*active_directory.DirectoryNode], error)
 }
 
 type DgraphDirectoryNodeRepository struct {
@@ -35,6 +38,32 @@ func (r *DgraphDirectoryNodeRepository) Delete(ctx context.Context, tx *dgo.Txn,
 func (r *DgraphDirectoryNodeRepository) AddParentDirectorNode(ctx context.Context, tx *dgo.Txn, directoryNodeUID, parentDirectoryNodeUID string) error {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (r *DgraphDirectoryNodeRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*active_directory.DirectoryNode], error) {
+	fields := []string{
+		"uid",
+		"directory_node.name",
+		"directory_node.description",
+		"directory_node.distinguished_name",
+		"directory_node.node_type",
+		"directory_node.is_builtin",
+		"created_at",
+		"modified_at",
+		"dgraph.type",
+	}
+
+	return dgraphutil.GetEntitiesWithAssertionsNHop[*active_directory.DirectoryNode](
+		ctx, tx, projectUID,
+		[]dgraphutil.HopConfig{
+			{Predicate: core.PredicateHasActiveDirectory},
+			{Predicate: core.PredicateHasDomain, ObjectType: "Domain"},
+			{Predicate: core.PredicateContains, ObjectType: "DirectoryNode"},
+		},
+
+		fields, "getProjectDirectorNodes",
+	)
+
 }
 
 func (r *DgraphDirectoryNodeRepository) FindByDistinguishedNameInDomain(ctx context.Context, tx *dgo.Txn, domainUID string, dsName string) (*active_directory.DirectoryNode, error) {
@@ -85,7 +114,7 @@ func (r *DgraphDirectoryNodeRepository) Update(ctx context.Context, tx *dgo.Txn,
 	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }
 
-func (r *DgraphDirectoryNodeRepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*core.EntityResult[*active_directory.DirectoryNode], error) {
+func (r *DgraphDirectoryNodeRepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*res.EntityResult[*active_directory.DirectoryNode], error) {
 	fields := []string{
 		"uid",
 		"directory_node.name",

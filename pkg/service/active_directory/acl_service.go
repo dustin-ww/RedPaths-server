@@ -6,6 +6,7 @@ import (
 	"RedPaths-server/internal/repository/redpaths"
 	"RedPaths-server/pkg/model/active_directory/priv"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"context"
 	"fmt"
@@ -46,9 +47,9 @@ func (s *ACLService) AddACE(
 	aclID string,
 	incomingACE *priv.ACE,
 	actor string,
-) (*core.EntityResult[*priv.ACE], error) {
+) (*res.EntityResult[*priv.ACE], error) {
 
-	var result *core.EntityResult[*priv.ACE]
+	var result *res.EntityResult[*priv.ACE]
 
 	log.Printf("[AddACE] name=%s, ACLUID=%s, actor=%s",
 		incomingACE.Name, aclID, actor)
@@ -108,10 +109,10 @@ func (s *ACLService) AddACE(
 		// }
 
 		// 4. Build result
-		result = &core.EntityResult[*priv.ACE]{
+		result = &res.EntityResult[*priv.ACE]{
 			Entity:     ace,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -134,9 +135,9 @@ func (s *ACLService) AddADRight(
 	aceID string,
 	incomingADRight *priv.ADRight,
 	actor string,
-) (*core.EntityResult[*priv.ADRight], error) {
+) (*res.EntityResult[*priv.ADRight], error) {
 
-	var result *core.EntityResult[*priv.ADRight]
+	var result *res.EntityResult[*priv.ADRight]
 
 	log.Printf("[AddACE] name=%s, ACE_UID=%s, actor=%s",
 		incomingADRight.Name, aceID, actor)
@@ -185,10 +186,10 @@ func (s *ACLService) AddADRight(
 		assertions = append(assertions, createdAssertion)
 
 		// Build result
-		result = &core.EntityResult[*priv.ADRight]{
+		result = &res.EntityResult[*priv.ADRight]{
 			Entity:     adRight,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -206,8 +207,8 @@ func (s *ACLService) AddADRight(
 	return result, nil
 }
 
-func (s *ACLService) GetAllACE(ctx context.Context, aclUID string) ([]*core.EntityResult[*priv.ACE], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*priv.ACE], error) {
+func (s *ACLService) GetAllACE(ctx context.Context, aclUID string) ([]*res.EntityResult[*priv.ACE], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*priv.ACE], error) {
 		return s.aclRepo.GetAllACEByACL(ctx, tx, aclUID)
 	})
 }

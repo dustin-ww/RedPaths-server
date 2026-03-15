@@ -4,6 +4,7 @@ import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	"context"
 	"time"
 
@@ -18,7 +19,7 @@ type ActiveDirectoryRepository interface {
 	Delete(ctx context.Context, tx *dgo.Txn, uid string) error
 
 	// With Assertions
-	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*core.EntityResult[*active_directory.ActiveDirectory], error)
+	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*active_directory.ActiveDirectory], error)
 	FindByForestNameInProject(ctx context.Context, tx *dgo.Txn, projectUID, adForestName string) (*active_directory.ActiveDirectory, error)
 }
 
@@ -61,7 +62,7 @@ func (r *DgraphActiveDirectoryRepository) GetByProjectUID(
 	ctx context.Context,
 	tx *dgo.Txn,
 	projectUID string,
-) ([]*core.EntityResult[*active_directory.ActiveDirectory], error) {
+) ([]*res.EntityResult[*active_directory.ActiveDirectory], error) {
 
 	fields := []string{
 		"uid",

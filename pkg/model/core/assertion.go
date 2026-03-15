@@ -25,6 +25,7 @@ const (
 	PredicateHasGPOLink         Predicate = "has_gpo_link"
 	PredicateParent             Predicate = "parent"
 	PredicateRuns               Predicate = "runs"
+	PredicateLinksTo            Predicate = "links_to"
 )
 
 // ----------------------

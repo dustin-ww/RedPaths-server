@@ -7,8 +7,10 @@ import (
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	rpad "RedPaths-server/pkg/model/active_directory"
+	"RedPaths-server/pkg/model/active_directory/gpo"
 	"RedPaths-server/pkg/model/active_directory/priv"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"RedPaths-server/pkg/model/utils/assertion"
 	"context"
@@ -25,9 +27,9 @@ type DomainService struct {
 	directoryNodeRepo active_directory.DirectoryNodeRepository
 	assertionRepo     redpaths.AssertionRepository
 	aclRepo           active_directory.ACLRepository
+	gpoRepo           active_directory.GPORepository
 
-	gpoService GPOService
-	db         *dgo.Dgraph
+	db *dgo.Dgraph
 }
 
 func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
@@ -35,6 +37,8 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 	hostRepo := active_directory.NewDgraphHostRepository(dgraphCon)
 	directoryNodeRepo := active_directory.NewDgraphDirectoryNodeRepository(dgraphCon)
 	assertionRepo := redpaths.NewDgraphAssertionRepository(dgraphCon)
+	aclRepo := active_directory.NewDgraphDgraphACLRepository(dgraphCon)
+	gpoRepo := active_directory.NewDgraphGPORepository(dgraphCon)
 
 	return &DomainService{
 		db:                dgraphCon,
@@ -42,6 +46,8 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 		hostRepo:          hostRepo,
 		directoryNodeRepo: directoryNodeRepo,
 		assertionRepo:     assertionRepo,
+		aclRepo:           aclRepo,
+		gpoRepo:           gpoRepo,
 	}, nil
 }
 
@@ -51,11 +57,11 @@ func (s *DomainService) AddHost(
 	domainUID string,
 	host *model.Host,
 	actor string,
-) (*core.EntityResult[*model.Host], error) {
+) (*res.EntityResult[*model.Host], error) {
 
 	log.Println("[AddHost]")
 
-	var result *core.EntityResult[*model.Host]
+	var result *res.EntityResult[*model.Host]
 
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 		existingHost, err := s.hostRepo.FindByIPInDomain(ctx, tx, domainUID, host.IP)
@@ -108,10 +114,10 @@ func (s *DomainService) AddHost(
 		}
 		assertions = append(assertions, createdAssertion)
 
-		result = &core.EntityResult[*model.Host]{
+		result = &res.EntityResult[*model.Host]{
 			Entity:     actualHost,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -135,11 +141,11 @@ func (s *DomainService) AddDirectoryNode(
 	domainUID string,
 	incomingDirectoryNode *rpad.DirectoryNode,
 	actor string,
-) (*core.EntityResult[*rpad.DirectoryNode], error) {
+) (*res.EntityResult[*rpad.DirectoryNode], error) {
 
 	log.Println("[AddDirectoryNode]")
 
-	var result *core.EntityResult[*rpad.DirectoryNode]
+	var result *res.EntityResult[*rpad.DirectoryNode]
 
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
@@ -156,6 +162,7 @@ func (s *DomainService) AddDirectoryNode(
 		}
 
 		var directoryNode *rpad.DirectoryNode
+		var acl *priv.ACL
 		var assertions []*core.Assertion
 
 		if existingDirectoryNode != nil {
@@ -186,14 +193,14 @@ func (s *DomainService) AddDirectoryNode(
 			)
 
 			// Create & Link ACL
-			acl := priv.ACL{Owner: actor}
-			createdACL, err := s.aclRepo.CreateACL(ctx, tx, &acl, actor)
+			aclEntity := &priv.ACL{}
+			acl, err = s.aclRepo.CreateACL(ctx, tx, aclEntity, actor)
 
 			if err != nil {
 				return fmt.Errorf("error while creating ACL for directory node: %w", err)
 			}
 
-			err = s.aclRepo.LinkACLToEntity(ctx, tx, createdACL.UID, directoryNode.UID)
+			err = s.aclRepo.LinkACLToEntity(ctx, tx, acl.UID, directoryNode.UID)
 
 			if err != nil {
 				return fmt.Errorf("error while linking ACL to directory node: %w", err)
@@ -221,10 +228,11 @@ func (s *DomainService) AddDirectoryNode(
 		}
 		assertions = append(assertions, createdAssertion)
 
-		result = &core.EntityResult[*rpad.DirectoryNode]{
+		result = &res.EntityResult[*rpad.DirectoryNode]{
 			Entity:     directoryNode,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			ACL:        acl,
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -241,135 +249,136 @@ func (s *DomainService) AddDirectoryNode(
 	return result, nil
 }
 
-/*
-func (s *DomainService) AddGPOLink(
+func (s *DomainService) GetLinkedGPOs(ctx context.Context, domainUID string) (*res.GPOQueryResult, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*res.GPOQueryResult, error) {
+		return s.gpoRepo.GetGPOResultsByDomain(ctx, tx, domainUID)
+	})
+}
 
-	ctx context.Context,
-	domainUID string,
-	gpoName string,
-	incomingGPOLink *rpad.DirectoryNode,
-	actor string,
+func (s *DomainService) LinkGPO(ctx context.Context, assertionCtx assertion.Context, incomingGPOLink *gpo.Link, incomingGPO *gpo.GPO, domainUID, actor string) (*res.GPOResult[*gpo.Link], error) {
+	log.Println("[AddGPOLink]")
 
-) (*core.EntityResult[*rpad.DirectoryNode], error) {
+	var result *res.GPOResult[*gpo.Link]
+	var linkedGPO *gpo.GPO
 
-		log.Println("[AddDirectoryNode]")
+	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
-		var result *core.EntityResult[*rpad.DirectoryNode]
-
-		err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
-
-			// Check if DirectoryNode already exists in domain
-			existingDirectoryNode, err := s.directoryNodeRepo.
-				FindByDistinguishedNameInDomain(
-					ctx,
-					tx,
-					domainUID,
-					incomingDirectoryNode.DistinguishedName,
-				)
-			if err != nil {
-				return fmt.Errorf("checking existing directory node: %w", err)
-			}
-
-			var directoryNode *rpad.DirectoryNode
-			var assertions []*core.Assertion
-
-			if existingDirectoryNode != nil {
-				// Reuse existing node
-				directoryNode = existingDirectoryNode
-				log.Printf(
-					"[AddDirectoryNode] Reusing existing directory node uid=%s dn=%s",
-					directoryNode.UID,
-					directoryNode.DistinguishedName,
-				)
-			} else {
-				// Create DirectoryNode
-				directoryNode, err = s.directoryNodeRepo.Create(
-					ctx,
-					tx,
-					incomingDirectoryNode,
-					actor,
-				)
-
-				if err != nil {
-					return fmt.Errorf("creating directory node: %w", err)
-				}
-
-				log.Printf(
-					"[AddDirectoryNode] Created directory node uid=%s dn=%s",
-					directoryNode.UID,
-					directoryNode.DistinguishedName,
-				)
-
-				// Create & Link ACL
-				acl := priv.ACL{Owner: actor}
-				createdACL, err := s.aclRepo.CreateACL(ctx, tx, &acl, actor)
-
-				if err != nil {
-					return fmt.Errorf("error while creating ACL for directory node: %w", err)
-				}
-
-				err = s.aclRepo.LinkACLToEntity(ctx, tx, createdACL.UID, directoryNode.UID)
-
-				if err != nil {
-					return fmt.Errorf("error while linking ACL to directory node: %w", err)
-				}
-				log.Printf("Created and linked acl to directory node")
-			}
-
-			// Create assertion
-			assertion := &core.Assertion{
-				Predicate:           core.PredicateContains,
-				Method:              core.MethodDirectAdd,
-				Source:              actor,
-				Confidence:          1.0,
-				Status:              core.StatusValidated,
-				Timestamp:           time.Now(),
-				HasDiscoveredParent: true,
-				MarkedAsHighValue:   false,
-				Subject:             &utils2.UIDRef{UID: domainUID, Type: "Domain"},
-				Object:              &utils2.UIDRef{UID: directoryNode.UID, Type: "DirectoryNode"},
-			}
-
-			createdAssertion, err := s.assertionRepo.Create(ctx, tx, assertion)
-			if err != nil {
-				return fmt.Errorf("creating assertion: %w", err)
-			}
-			assertions = append(assertions, createdAssertion)
-
-			result = &core.EntityResult[*rpad.DirectoryNode]{
-				Entity:     directoryNode,
-				Assertions: assertions,
-				Metadata: &core.ResultMetadata{
-					Source:         actor,
-					ScanTimestamp:  time.Now(),
-					EntityCount:    1,
-					AssertionCount: len(assertions),
-				},
-			}
-			return nil
-		})
-
+		// Check if gpo already exists in domain scope
+		existingGPO, err := s.domainRepo.GetGPOIfKnown(ctx, tx, incomingGPO.Name)
 		if err != nil {
-			return nil, fmt.Errorf("AddDirectoryNode failed: %w", err)
+			return fmt.Errorf("error while checking existing directory node: %w", err)
 		}
 
-		return result, nil
+		if len(existingGPO) == 0 {
+			log.Println("[AddGPOLink] No existing GPO found. Creating new one")
+			linkedGPO, err = s.gpoRepo.CreateGPO(ctx, tx, incomingGPO, actor)
+			if err != nil {
+				return fmt.Errorf("error while creating gpo: %w", err)
+			}
+		} else {
+			// names of gpos are unique, so is only one result gpo
+			log.Println("Found GPO in Domain. Using existing one...")
+			linkedGPO = existingGPO[0]
+		}
+
+		var gpoLink *gpo.Link
+		var gpoLinkAssertion []*core.Assertion
+		var gpoAssertion []*core.Assertion
+
+		//TODO: Exist Check for links
+
+		gpoLink, err = s.gpoRepo.CreateLink(
+			ctx,
+			tx,
+			incomingGPOLink,
+			actor,
+		)
+
+		if err != nil {
+			return fmt.Errorf("failed creating gpo link: %w", err)
+		}
+
+		log.Printf(
+			"[AddGPOLink] Created gpo link to domain uid=%s",
+			gpoLink.UID,
+		)
+		// Create assertion to gpo link
+		assertionEntity := &core.Assertion{
+			Predicate:           core.PredicateHasGPOLink,
+			Method:              core.MethodDirectAdd,
+			Source:              actor,
+			Confidence:          assertionCtx.GetConfidence(),
+			Status:              core.StatusValidated,
+			Timestamp:           time.Now(),
+			HasDiscoveredParent: true,
+			MarkedAsHighValue:   assertionCtx.IsHighValue(),
+			Subject:             &utils2.UIDRef{UID: domainUID, Type: "Domain"},
+			Object:              &utils2.UIDRef{UID: gpoLink.UID, Type: "GPOLink"},
+		}
+
+		createdAssertion, err := s.assertionRepo.Create(ctx, tx, assertionEntity)
+		if err != nil {
+			return fmt.Errorf("creating assertion from domain to gpo link: %w", err)
+		}
+		gpoLinkAssertion = append(gpoLinkAssertion, createdAssertion)
+
+		// Create assertion to gpo
+		assertionEntity = &core.Assertion{
+			Predicate:           core.PredicateLinksTo,
+			Method:              core.MethodDirectAdd,
+			Source:              actor,
+			Confidence:          assertionCtx.GetConfidence(),
+			Status:              core.StatusValidated,
+			Timestamp:           time.Now(),
+			HasDiscoveredParent: true,
+			MarkedAsHighValue:   assertionCtx.IsHighValue(),
+			Subject:             &utils2.UIDRef{UID: gpoLink.UID, Type: "GPOLink"},
+			Object:              &utils2.UIDRef{UID: linkedGPO.UID, Type: "GPO"},
+		}
+
+		createdAssertion, err = s.assertionRepo.Create(ctx, tx, assertionEntity)
+		if err != nil {
+			return fmt.Errorf("creating assertion: %w", err)
+		}
+		gpoAssertion = append(gpoAssertion, createdAssertion)
+
+		result = &res.GPOResult[*gpo.Link]{
+			GPOLink:           gpoLink,
+			GPOLinkAssertions: gpoLinkAssertion,
+			GPO:               linkedGPO,
+			GPOAssertions:     gpoAssertion,
+			Metadata: &res.ResultMetadata{
+				Source:         actor,
+				ScanTimestamp:  time.Now(),
+				EntityCount:    2,
+				AssertionCount: len(gpoAssertion) + len(gpoLinkAssertion),
+			},
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("AddDirectoryNode failed: %w", err)
 	}
-*/
-func (s *DomainService) GetDomainHosts(ctx context.Context, domainUID string) ([]*core.EntityResult[*model.Host], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*model.Host], error) {
+
+	return result, nil
+
+}
+
+func (s *DomainService) GetDomainHosts(ctx context.Context, domainUID string) ([]*res.EntityResult[*model.Host], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*model.Host], error) {
 		return s.hostRepo.GetAllByDomainUID(ctx, tx, domainUID)
 	})
 }
 
-func (s *DomainService) GetDomainGPOs(ctx context.Context, domainUID string) ([]*core.EntityResult[*model.Host], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*model.Host], error) {
-		return s.hostRepo.GetAllByDomainUID(ctx, tx, domainUID)
+func (s *DomainService) GetDomainGPOs(ctx context.Context, domainUID string) (*res.GPOQueryResult, error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*res.GPOQueryResult, error) {
+		return s.gpoRepo.GetGPOResultsByDomain(ctx, tx, domainUID)
 	})
 }
 
-func (s *DomainService) GetDomainDirectoryNodes(ctx context.Context, domainUID string) ([]*core.EntityResult[*rpad.DirectoryNode], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*rpad.DirectoryNode], error) {
+func (s *DomainService) GetDomainDirectoryNodes(ctx context.Context, domainUID string) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
 		return s.directoryNodeRepo.GetAllByDomainUID(ctx, tx, domainUID)
 	})
 }

@@ -4,8 +4,10 @@ import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model/active_directory/gpo"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dgraph-io/dgo/v210"
 )
@@ -23,16 +25,20 @@ type GPORepository interface {
 
 	AddGPOToLink(ctx context.Context, tx *dgo.Txn, linkUID, gpoUID string) error
 
-	FindGPOByNameInContainer(ctx context.Context, tx *dgo.Txn, domainUID, gpoName string) (*gpo.GPO, error)
-
+	GetGPOResultsByDomain(ctx context.Context, tx *dgo.Txn, domainUID string) (*res.GPOQueryResult, error)
 	ExistsGPOByNameInContainer(ctx context.Context, tx *dgo.Txn, domainUID, gpoName string) (bool, string, error)
 
-	GetGPOLinksWithGPO(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*core.EntityResult[*gpo.Link], error)
-	FindGPOLinkByGPOName(ctx context.Context, tx *dgo.Txn, domainUID, gpoName string) (*core.EntityResult[*gpo.Link], error)
+	GetGPOLinksWithGPO(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*res.EntityResult[*gpo.Link], error)
+	FindGPOLinkByGPOName(ctx context.Context, tx *dgo.Txn, domainUID, gpoName string) (*res.EntityResult[*gpo.Link], error)
 }
 
 type DgraphGPORepository struct {
 	DB *dgo.Dgraph
+}
+
+func (d *DgraphGPORepository) FindGPOLinkByGPOName(ctx context.Context, tx *dgo.Txn, domainUID, gpoName string) (*res.EntityResult[*gpo.Link], error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func NewDgraphGPORepository(db *dgo.Dgraph) *DgraphGPORepository {
@@ -44,7 +50,7 @@ func (d *DgraphGPORepository) GetGPOLinksWithGPO(
 	ctx context.Context,
 	tx *dgo.Txn,
 	domainUID string,
-) ([]*core.EntityResult[*gpo.Link], error) {
+) ([]*res.EntityResult[*gpo.Link], error) {
 
 	// Felder für den GPOLink
 	linkFields := []string{
@@ -96,12 +102,12 @@ func (d *DgraphGPORepository) GetGPOLinksWithGPO(
 }
 
 // FindGPOLinkByGPOName findet einen GPOLink anhand des GPO-Namens in einer Domain
-func (d *DgraphGPORepository) FindGPOLinkByGPOName(
+/*func (d *DgraphGPORepository) FindGPOLinkByGPOName(
 	ctx context.Context,
 	tx *dgo.Txn,
 	domainUID string,
 	gpoName string,
-) (*core.EntityResult[*gpo.Link], error) {
+) (*res.EntityResult[*gpo.Link], error) {
 
 	// Alle GPOLinks mit eingebetteten GPOs laden
 	allLinks, err := d.GetGPOLinksWithGPO(ctx, tx, domainUID)
@@ -118,7 +124,7 @@ func (d *DgraphGPORepository) FindGPOLinkByGPOName(
 
 	return nil, nil
 }
-
+*/
 func (d *DgraphGPORepository) AddGPOToLink(ctx context.Context, tx *dgo.Txn, domainUID, assertionUID string) error {
 	relationName := "has_assertion"
 	err := dgraphutil.AddRelation(ctx, tx, domainUID, assertionUID, relationName)
@@ -128,7 +134,7 @@ func (d *DgraphGPORepository) AddGPOToLink(ctx context.Context, tx *dgo.Txn, dom
 	return nil
 }
 
-func (r *DgraphGPORepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, activeDirectoryUID string) ([]*core.EntityResult[*gpo.Link], error) {
+func (r *DgraphGPORepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, activeDirectoryUID string) ([]*res.EntityResult[*gpo.Link], error) {
 	fields := []string{
 		"uid",
 		"gpo_link.name",
@@ -242,6 +248,44 @@ func (r *DgraphDomainRepository) AddLinksToRelation(ctx context.Context, tx *dgo
 		return fmt.Errorf("error while linking gpo link %s to gpo %s with relation %s", gpoLinkUID, gpoUID, relationName)
 	}
 	return nil
+}
+
+func (d *DgraphGPORepository) GetGPOResultsByDomain(ctx context.Context, tx *dgo.Txn, domainUID string) (*res.GPOQueryResult, error) {
+	entries, err := dgraphutil.GetGPOLinksWithGPOs(
+		ctx,
+		tx,
+		domainUID,
+		[]string{
+			"uid",
+			"dgraph.type",
+			"gpo_link.link_order",
+			"gpo_link.is_enforced",
+			"gpo_link.is_enabled",
+		},
+		[]string{
+			"uid",
+			"dgraph.type",
+			"gpo.name",
+		},
+		"getGPOResultsByDomain",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("GetGPOResultsByDomain failed: %w", err)
+	}
+
+	assertionCount := 0
+	for _, e := range entries {
+		assertionCount += len(e.GPOLinkAssertions) + len(e.GPOAssertions)
+	}
+
+	return &res.GPOQueryResult{
+		Entries: entries,
+		Metadata: &res.ResultMetadata{
+			EntityCount:    len(entries),
+			AssertionCount: assertionCount,
+			ScanTimestamp:  time.Now(),
+		},
+	}, nil
 }
 
 func (d *DgraphGPORepository) GetGPO(ctx context.Context, tx *dgo.Txn, uid string) (*gpo.GPO, error) {

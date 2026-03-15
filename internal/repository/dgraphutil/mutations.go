@@ -2,6 +2,7 @@ package dgraphutil
 
 import (
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	"RedPaths-server/pkg/model/utils"
 	"context"
 	"encoding/json"
@@ -203,177 +204,6 @@ func ExistsEntityViaAssertionAndRelation(
 	}
 
 	return false, "", nil
-}
-
-func GetEntitiesWithAssertions[T any](
-	ctx context.Context,
-	tx *dgo.Txn,
-	subjectUID string,
-	predicate core.Predicate,
-	objectType string,
-	objectFields []string,
-	queryName string,
-) ([]*core.EntityResult[T], error) {
-	if tx == nil {
-		return nil, fmt.Errorf("transaction cannot be nil")
-	}
-	if queryName == "" {
-		queryName = "getEntitiesWithAssertions"
-	}
-
-	// Default object fields
-	if len(objectFields) == 0 {
-		objectFields = []string{
-			"uid",
-			"dgraph.type",
-		}
-	}
-	fieldsStr := strings.Join(objectFields, "\n                        ")
-
-	// optional type filter for the object node
-	typeFilter := ""
-	if strings.TrimSpace(objectType) != "" {
-		typeFilter = fmt.Sprintf("@filter(type(%s))", objectType)
-	}
-
-	// Build Query
-	query := fmt.Sprintf(`
-		query %s($subjectUID: string, $predicate: string) {
-			subject(func: uid($subjectUID)) {
-				assertions: ~assertion.subject @filter(eq(assertion.predicate, $predicate)) {
-					assertion_uid: uid
-					assertion.predicate
-					assertion.method
-					assertion.source
-					assertion.confidence
-					assertion.status
-					assertion.timestamp
-					assertion.note
-					assertion.high_value_marked
-					assertion.has_discovered_parent
-					object: assertion.object %s {
-						%s
-					}
-				}
-			}
-		}
-	`, queryName, typeFilter, fieldsStr)
-
-	variables := map[string]string{
-		"$subjectUID": subjectUID,
-		"$predicate":  string(predicate),
-	}
-
-	resp, err := tx.QueryWithVars(ctx, query, variables)
-	if err != nil {
-		return nil, fmt.Errorf("query failed: %w", err)
-	}
-
-	// Flexibles Unmarshalling mit RawMessage
-	var rawResult struct {
-		Subject []struct {
-			Assertions []struct {
-				AssertionUID        string          `json:"assertion_uid"`
-				Predicate           string          `json:"assertion.predicate"`
-				Method              string          `json:"assertion.method"`
-				Source              string          `json:"assertion.source"`
-				Confidence          float64         `json:"assertion.confidence"`
-				Status              string          `json:"assertion.status"`
-				Timestamp           time.Time       `json:"assertion.timestamp"`
-				Note                string          `json:"assertion.note"`
-				HighValueMarked     bool            `json:"assertion.high_value_marked"`
-				HasDiscoveredParent bool            `json:"assertion.has_discovered_parent"`
-				Object              json.RawMessage `json:"object"` // ← FLEXIBEL!
-			} `json:"assertions"`
-		} `json:"subject"`
-	}
-
-	if err := json.Unmarshal(resp.Json, &rawResult); err != nil {
-		return nil, fmt.Errorf("unmarshal failed: %w", err)
-	}
-
-	if len(rawResult.Subject) == 0 {
-		log.Printf("[%s] No subject found with UID %s", queryName, subjectUID)
-		return []*core.EntityResult[T]{}, nil
-	}
-
-	var entityResults []*core.EntityResult[T]
-
-	for _, assertionData := range rawResult.Subject[0].Assertions {
-		if len(assertionData.Object) == 0 {
-			continue
-		}
-
-		// Parse Object flexibel - versuche Array, dann einzelnes Objekt
-		var entities []T
-
-		// Versuch 1: Als Array parsen
-		if err := json.Unmarshal(assertionData.Object, &entities); err != nil {
-			// Versuch 2: Als einzelnes Objekt parsen
-			var singleEntity T
-			if err := json.Unmarshal(assertionData.Object, &singleEntity); err != nil {
-				log.Printf("[%s] warn: failed to unmarshal object: %v\njson: %s",
-					queryName, err, string(assertionData.Object))
-				continue
-			}
-			entities = []T{singleEntity}
-		}
-
-		// Wenn keine Entities gefunden, überspringe
-		if len(entities) == 0 {
-			continue
-		}
-
-		// Verarbeite jede Entity (normalerweise nur eine)
-		for _, entity := range entities {
-			// Extract object UID aus der Entity
-			var objectUID string
-			entityValue := reflect.ValueOf(entity)
-			if entityValue.Kind() == reflect.Ptr {
-				entityValue = entityValue.Elem()
-			}
-			if entityValue.Kind() == reflect.Struct {
-				uidField := entityValue.FieldByName("UID")
-				if uidField.IsValid() && uidField.Kind() == reflect.String {
-					objectUID = uidField.String()
-				}
-			}
-
-			// Build core.Assertion
-			assertion := &core.Assertion{
-				UID:                 assertionData.AssertionUID,
-				Predicate:           core.Predicate(assertionData.Predicate),
-				Method:              core.Method(assertionData.Method),
-				Source:              assertionData.Source,
-				Confidence:          assertionData.Confidence,
-				Status:              core.Status(assertionData.Status),
-				Timestamp:           assertionData.Timestamp,
-				Note:                assertionData.Note,
-				MarkedAsHighValue:   assertionData.HighValueMarked,
-				HasDiscoveredParent: assertionData.HasDiscoveredParent,
-				Subject:             &utils.UIDRef{UID: subjectUID},
-				Object:              &utils.UIDRef{UID: objectUID},
-			}
-
-			entityResult := &core.EntityResult[T]{
-				Entity:     entity,
-				Assertions: []*core.Assertion{assertion},
-				Metadata: &core.ResultMetadata{
-					Source:         assertionData.Source,
-					ScanTimestamp:  assertionData.Timestamp,
-					EntityCount:    1,
-					AssertionCount: 1,
-				},
-			}
-
-			entityResults = append(entityResults, entityResult)
-		}
-	}
-
-	log.Printf("[%s] Found %d entities with assertions (subject: %s, predicate: %s)",
-		queryName, len(entityResults), subjectUID, predicate)
-
-	return entityResults, nil
 }
 
 func UpdateAndGet[T any](
@@ -746,21 +576,69 @@ func ExistsByField(ctx context.Context, tx *dgo.Txn, entityType string, fieldNam
 		return false, fmt.Errorf("transaction cannot be nil")
 	}
 
-	dgType, dgValue, err := getDgraphTypeAndValue(fieldValue)
-	if err != nil {
-		return false, fmt.Errorf("type handling error: %w", err)
+	var query string
+	var vars map[string]string
+
+	switch v := fieldValue.(type) {
+	case string:
+		query = fmt.Sprintf(`
+            query ExistsByField($fieldValue: string) {
+                entity(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    uid
+                }
+            }
+        `, entityType, fieldName)
+		vars = map[string]string{"$fieldValue": v}
+
+	case int, int32, int64:
+		query = fmt.Sprintf(`
+            query ExistsByField($fieldValue: int) {
+                entity(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    uid
+                }
+            }
+        `, entityType, fieldName)
+		vars = map[string]string{"$fieldValue": fmt.Sprintf("%d", v)}
+
+	case float32, float64:
+		query = fmt.Sprintf(`
+            query ExistsByField($fieldValue: float) {
+                entity(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    uid
+                }
+            }
+        `, entityType, fieldName)
+		vars = map[string]string{"$fieldValue": fmt.Sprintf("%g", v)}
+
+	case bool:
+		query = fmt.Sprintf(`
+            query ExistsByField($fieldValue: bool) {
+                entity(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    uid
+                }
+            }
+        `, entityType, fieldName)
+		vars = map[string]string{"$fieldValue": fmt.Sprintf("%t", v)}
+
+	default:
+		// uid oder unbekannter Typ: direkt interpolieren, keine Variable
+		query = fmt.Sprintf(`
+            {
+                entity(func: type(%s)) @filter(eq(%s, %v)) {
+                    uid
+                }
+            }
+        `, entityType, fieldName, fieldValue)
+		vars = nil
 	}
 
-	query := fmt.Sprintf(`
-		query ExistsByField($fieldValue: %s) {
-			entity(func: type(%s)) @filter(eq(%s, $fieldValue)) {
-				uid
-			}
-		}
-	`, dgType, entityType, fieldName)
-
-	vars := map[string]string{"$fieldValue": dgValue}
-	res, err := tx.QueryWithVars(ctx, query, vars)
+	var res *api.Response
+	var err error
+	if vars != nil {
+		res, err = tx.QueryWithVars(ctx, query, vars)
+	} else {
+		res, err = tx.Query(ctx, query)
+	}
 	if err != nil {
 		return false, fmt.Errorf("query error: %w", err)
 	}
@@ -770,7 +648,6 @@ func ExistsByField(ctx context.Context, tx *dgo.Txn, entityType string, fieldNam
 			UID string `json:"uid"`
 		} `json:"entity"`
 	}
-
 	if err := json.Unmarshal(res.Json, &result); err != nil {
 		return false, fmt.Errorf("unmarshal error: %w", err)
 	}
@@ -1030,30 +907,74 @@ func GetEntityByField[T any](
 		return nil, fmt.Errorf("transaction cannot be nil")
 	}
 
-	dgType, dgValue, err := getDgraphTypeAndValue(fieldValue)
-	if err != nil {
-		return nil, fmt.Errorf("type handling error: %w", err)
-	}
-
 	fieldsStr := strings.Join(fields, "\n")
 
-	query := fmt.Sprintf(`
-		query GetEntityByField($fieldValue: %s) {
-			%s(func: type(%s)) @filter(eq(%s, $fieldValue)) {
-				%s
-			}
-		}
-	`, dgType, entityType, entityType, fieldName, fieldsStr)
+	var resp *api.Response
+	var err error
 
-	vars := map[string]string{"$fieldValue": dgValue}
-	resp, err := tx.QueryWithVars(ctx, query, vars)
+	switch v := fieldValue.(type) {
+	case string:
+		query := fmt.Sprintf(`
+            query GetEntityByField($fieldValue: string) {
+                %s(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    %s
+                }
+            }
+        `, entityType, entityType, fieldName, fieldsStr)
+		resp, err = tx.QueryWithVars(ctx, query, map[string]string{"$fieldValue": v})
+
+	case int, int32, int64:
+		query := fmt.Sprintf(`
+            query GetEntityByField($fieldValue: int) {
+                %s(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    %s
+                }
+            }
+        `, entityType, entityType, fieldName, fieldsStr)
+		resp, err = tx.QueryWithVars(ctx, query, map[string]string{"$fieldValue": fmt.Sprintf("%d", v)})
+
+	case float32, float64:
+		query := fmt.Sprintf(`
+            query GetEntityByField($fieldValue: float) {
+                %s(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    %s
+                }
+            }
+        `, entityType, entityType, fieldName, fieldsStr)
+		resp, err = tx.QueryWithVars(ctx, query, map[string]string{"$fieldValue": fmt.Sprintf("%g", v)})
+
+	case bool:
+		query := fmt.Sprintf(`
+            query GetEntityByField($fieldValue: bool) {
+                %s(func: type(%s)) @filter(eq(%s, $fieldValue)) {
+                    %s
+                }
+            }
+        `, entityType, entityType, fieldName, fieldsStr)
+		resp, err = tx.QueryWithVars(ctx, query, map[string]string{"$fieldValue": fmt.Sprintf("%t", v)})
+
+	case uint64:
+		// uid direkt interpolieren – keine Query-Variable möglich
+		query := fmt.Sprintf(`
+            {
+                %s(func: uid(%d)) {
+                    %s
+                }
+            }
+        `, entityType, v, fieldsStr)
+		resp, err = tx.Query(ctx, query)
+
+	default:
+		return nil, fmt.Errorf("unsupported field value type: %T", fieldValue)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("query error: %w", err)
 	}
 
 	var rawResult map[string]json.RawMessage
 	if err := json.Unmarshal(resp.Json, &rawResult); err != nil {
-		return nil, fmt.Errorf("unmarshal raw result error: %w", err)
+		return nil, fmt.Errorf("unmarshal error: %w", err)
 	}
 
 	entitiesData, ok := rawResult[entityType]
@@ -1665,7 +1586,7 @@ func GetEntitiesWithAssertionsAndEmbeddedRelation[T any](
 	embeddedType string, // z.B. "GPO"
 	embeddedFields []string, // Felder der eingebetteten Entity
 	queryName string,
-) ([]*core.EntityResult[T], error) {
+) ([]*res.EntityResult[T], error) {
 	if tx == nil {
 		return nil, fmt.Errorf("transaction cannot be nil")
 	}
@@ -1766,10 +1687,10 @@ func GetEntitiesWithAssertionsAndEmbeddedRelation[T any](
 
 	if len(rawResult.Subject) == 0 {
 		log.Printf("[%s] No subject found with UID %s", queryName, subjectUID)
-		return []*core.EntityResult[T]{}, nil
+		return []*res.EntityResult[T]{}, nil
 	}
 
-	var entityResults []*core.EntityResult[T]
+	var entityResults []*res.EntityResult[T]
 
 	for _, assertionData := range rawResult.Subject[0].Assertions {
 		if len(assertionData.Object) == 0 {
@@ -1827,10 +1748,10 @@ func GetEntitiesWithAssertionsAndEmbeddedRelation[T any](
 				Object:              &utils.UIDRef{UID: objectUID},
 			}
 
-			entityResult := &core.EntityResult[T]{
+			entityResult := &res.EntityResult[T]{
 				Entity:     entity,
 				Assertions: []*core.Assertion{assertion},
-				Metadata: &core.ResultMetadata{
+				Metadata: &res.ResultMetadata{
 					Source:         assertionData.Source,
 					ScanTimestamp:  assertionData.Timestamp,
 					EntityCount:    1,

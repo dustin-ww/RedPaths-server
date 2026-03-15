@@ -6,7 +6,6 @@ import (
 )
 
 type RedPathsMetadata struct {
-	// history related
 	DiscoveredAt time.Time `json:"discovered_at,omitempty"`
 	DiscoveredBy string    `json:"discovered_by,omitempty"`
 	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
@@ -52,7 +51,7 @@ func UnmarshalWithMetadata(data []byte, target interface{}, metadata *RedPathsMe
 	return nil
 }
 
-// MarshalWithMetadata marshals target with embedded metadata
+// MarshalWithMetadata marshals target with embedded metadata fields
 func MarshalWithMetadata(target interface{}, metadata RedPathsMetadata) ([]byte, error) {
 	targetBytes, err := json.Marshal(target)
 	if err != nil {
@@ -65,10 +64,10 @@ func MarshalWithMetadata(target interface{}, metadata RedPathsMetadata) ([]byte,
 	}
 
 	if !metadata.ValidatedAt.IsZero() {
-		targetMap["validated_at"] = metadata.CreatedAt
+		targetMap["last_validated_at"] = metadata.ValidatedAt
 	}
 	if metadata.ValidatedBy != "" {
-		targetMap["validated_by"] = metadata.CreatedAt
+		targetMap["last_validated_by"] = metadata.ValidatedBy
 	}
 	if !metadata.CreatedAt.IsZero() {
 		targetMap["created_at"] = metadata.CreatedAt

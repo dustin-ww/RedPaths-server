@@ -5,7 +5,7 @@ import (
 	"RedPaths-server/internal/rest/requests"
 	"RedPaths-server/pkg/model"
 	rpad "RedPaths-server/pkg/model/active_directory"
-	gpo2 "RedPaths-server/pkg/model/active_directory/gpo"
+	"RedPaths-server/pkg/model/active_directory/gpo"
 	"RedPaths-server/pkg/service/active_directory"
 
 	"log"
@@ -77,16 +77,15 @@ func (h *DomainHandler) GetGPOs(c *gin.Context) {
 	//domain := restcontext.Domain(c)
 	domainUID := c.Param("domainUID")
 
-	hosts, err := h.domainService.GetDomainHosts(
+	gpos, err := h.domainService.GetDomainGPOs(
 		c.Request.Context(),
-		domainUID,
-	)
+		domainUID)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, hosts)
+	c.JSON(http.StatusOK, gpos)
 }
 
 func (h *DomainHandler) GetDirectoryNodes(c *gin.Context) {
@@ -123,6 +122,48 @@ func (h *DomainHandler) GetDeepChildDirectoryNodes(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, errReturn)
 	}
 	c.JSON(http.StatusOK, directoryNodes)
+
+}
+
+func (h *DomainHandler) AddGPOLink(c *gin.Context) {
+
+	var request requests.AddDirectoryNodeRequest
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request to add a new directory node",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	domainUID := c.Param("domainUID")
+
+	directoryNode := &rpad.DirectoryNode{
+		Name: request.Name,
+	}
+
+	createdDirectoryNode, err := h.domainService.AddDirectoryNode(
+		c.Request.Context(),
+		request.AssertionContext,
+		domainUID,
+		directoryNode,
+		"user",
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to add directory node into domain",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":               "success",
+		"message":              "New directory node has been added to the domain",
+		"added_directory_node": createdDirectoryNode,
+	})
 
 }
 
@@ -168,17 +209,11 @@ func (h *DomainHandler) AddDirectoryNode(c *gin.Context) {
 
 }
 
-func (h *DomainHandler) AddGPOLink(c *gin.Context) {
-	type AddDirectoryNodeRequest struct {
-		Name      string `json:"name" binding:"required" validate:"required"`
-		LinkOrder int    `json:"linkOrder" binding:"required" validate:"required"`
-	}
-
-	var request AddDirectoryNodeRequest
-
+func (h *DomainHandler) LinkGPO(c *gin.Context) {
+	var request requests.AddGPOLinkRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request to add a new gpo link",
+			"error":   "Invalid request to add a GPO link",
 			"details": err.Error(),
 		})
 		return
@@ -186,32 +221,33 @@ func (h *DomainHandler) AddGPOLink(c *gin.Context) {
 
 	domainUID := c.Param("domainUID")
 
-	// INIT
-	gpo := gpo2.GPO{Name: request.Name}
-	gpoLink := gpo2.Link{LinkOrder: request.LinkOrder}
-	gpoLink.LinksTo = &gpo
+	gpoLink := &gpo.Link{
+		LinkOrder:  request.GPOLink.LinkOrder,
+		IsEnforced: request.GPOLink.IsEnforced,
+		IsEnabled:  request.GPOLink.IsEnabled,
+	}
 
-	createdGPOLink, err := h.gpoService.LinkGPOToContainer(
+	gpoEntity := &gpo.GPO{
+		Name: request.GPO.Name,
+	}
+
+	result, err := h.domainService.LinkGPO(
 		c.Request.Context(),
+		request.AssertionContext,
+		gpoLink,
+		gpoEntity,
 		domainUID,
-		"Domain",
-		&gpoLink,
 		"user",
 	)
-
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to add gpo link to domain",
+			"error":   "Failed to link GPO",
 			"details": err.Error(),
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":               "success",
-		"message":              "New gpo link has been added to the domain",
-		"added_directory_node": createdGPOLink,
-	})
+	c.JSON(http.StatusCreated, result)
 
 }
 

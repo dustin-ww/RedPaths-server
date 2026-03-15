@@ -10,6 +10,7 @@ import (
 	"RedPaths-server/pkg/model"
 	rpad "RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"RedPaths-server/pkg/model/utils/assertion"
 	"context"
@@ -30,8 +31,11 @@ type ProjectService struct {
 
 	hostService         HostService
 	hostRepo            active_directory.HostRepository
+	serviceRepo         active_directory.ServiceRepository
+	domainRepo          active_directory.DomainRepository
 	targetRepo          active_directory.TargetRepository
 	userRepo            active_directory.UserRepository
+	directoryNodeRepo   active_directory.DirectoryNodeRepository
 	activeDirectoryRepo active_directory.ActiveDirectoryRepository
 	assertionRepo       redpaths.AssertionRepository
 
@@ -48,9 +52,12 @@ func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectSer
 		pdb:                 postgresCon,
 		projectRepo:         active_directory.NewDgraphProjectRepository(dgraphCon),
 		activeDirectoryRepo: active_directory.NewDgraphActiveDirectoryRepository(dgraphCon),
+		domainRepo:          active_directory.NewDgraphDomainRepository(dgraphCon),
 		hostRepo:            active_directory.NewDgraphHostRepository(dgraphCon),
 		targetRepo:          active_directory.NewDgraphTargetRepository(dgraphCon),
 		userRepo:            active_directory.NewDgraphUserRepository(dgraphCon),
+		serviceRepo:         active_directory.NewDgraphServiceRepository(dgraphCon),
+		directoryNodeRepo:   active_directory.NewDgraphDirectoryNodeRepository(dgraphCon),
 		assertionRepo:       redpaths.NewDgraphAssertionRepository(dgraphCon),
 	}, nil
 }
@@ -59,8 +66,8 @@ func (s *ProjectService) AddActiveDirectory(
 	ctx context.Context,
 	assertionCtx assertion.Context,
 	projectUID string, incomingActiveDirectory *rpad.ActiveDirectory, actor string,
-) (*core.EntityResult[*rpad.ActiveDirectory], error) {
-	var result *core.EntityResult[*rpad.ActiveDirectory]
+) (*res.EntityResult[*rpad.ActiveDirectory], error) {
+	var result *res.EntityResult[*rpad.ActiveDirectory]
 
 	log.Printf("[AddActiveDirectory] forestName=%s, projectUID=%s, actor=%s",
 		incomingActiveDirectory.ForestName, projectUID, actor)
@@ -117,10 +124,10 @@ func (s *ProjectService) AddActiveDirectory(
 		}
 
 		// Build result
-		result = &core.EntityResult[*rpad.ActiveDirectory]{
+		result = &res.EntityResult[*rpad.ActiveDirectory]{
 			Entity:     ad,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -138,9 +145,21 @@ func (s *ProjectService) AddActiveDirectory(
 	return result, nil
 }
 
-func (s *ProjectService) GetAllActiveDirectories(ctx context.Context, projectUID string) ([]*core.EntityResult[*rpad.ActiveDirectory], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*rpad.ActiveDirectory], error) {
+func (s *ProjectService) GetAllActiveDirectories(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.ActiveDirectory], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.ActiveDirectory], error) {
 		return s.activeDirectoryRepo.GetByProjectUID(ctx, tx, projectUID)
+	})
+}
+
+func (s *ProjectService) GetAllDirectoryNodes(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
+		return s.directoryNodeRepo.GetByProjectUID(ctx, tx, projectUID)
+	})
+}
+
+func (s *ProjectService) GetAllDomains(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.Domain], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.Domain], error) {
+		return s.domainRepo.GetAllByProjectUID(ctx, tx, projectUID)
 	})
 }
 
@@ -269,14 +288,20 @@ func (s *ProjectService) DeleteProject(ctx context.Context, projectUID string) e
 	})
 }
 
-func (s *ProjectService) GetHostsByProject(ctx context.Context, projectUID string) ([]*model.Host, error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*model.Host, error) {
+func (s *ProjectService) GetHostsByProject(ctx context.Context, projectUID string) ([]*res.EntityResult[*model.Host], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*model.Host], error) {
 		return s.hostRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 	})
 }
 
+func (s *ProjectService) GetServicesByProject(ctx context.Context, projectUID string) ([]*res.EntityResult[*model.Service], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*model.Service], error) {
+		return s.serviceRepo.GetByProjectUID(ctx, tx, projectUID)
+	})
+}
+
 // TODO: Direct query
-func (s *ProjectService) GetHostByProject(ctx context.Context, projectUID, hostUID string) (*model.Host, error) {
+/*func (s *ProjectService) GetHostByProject(ctx context.Context, projectUID, hostUID string) (*model.Host, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) (*model.Host, error) {
 		hosts, err := s.hostRepo.GetByProjectIncludingDomains(ctx, tx, projectUID)
 
@@ -291,7 +316,7 @@ func (s *ProjectService) GetHostByProject(ctx context.Context, projectUID, hostU
 		}
 		return nil, rperror.ErrNotFound
 	})
-}
+}*/
 
 func (s *ProjectService) GetAllUserInProject(ctx context.Context, projectUID string) ([]*rpad.User, error) {
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*rpad.User, error) {

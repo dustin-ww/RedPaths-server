@@ -10,6 +10,7 @@ import (
 	"RedPaths-server/pkg/model/active_directory/gpo"
 	"RedPaths-server/pkg/model/active_directory/priv"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"context"
 	"fmt"
@@ -54,11 +55,11 @@ func (s *DirectoryNodeService) AddSecurityPrincipal(
 	directoryNodeUID string,
 	incomingSecurityPrincipal rpad.SecurityPrincipal,
 	actor string,
-) (*core.EntityResult[rpad.SecurityPrincipal], error) {
+) (*res.EntityResult[rpad.SecurityPrincipal], error) {
 
 	log.Println("[AddSecurityPrincipal]")
 
-	var result *core.EntityResult[rpad.SecurityPrincipal]
+	var result *res.EntityResult[rpad.SecurityPrincipal]
 
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
@@ -128,10 +129,10 @@ func (s *DirectoryNodeService) AddSecurityPrincipal(
 		assertions = append(assertions, createdAssertion)
 
 		// Build result (identisch zu AddDirectoryNode)
-		result = &core.EntityResult[rpad.SecurityPrincipal]{
+		result = &res.EntityResult[rpad.SecurityPrincipal]{
 			Entity:     securityPrincipal,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -154,7 +155,7 @@ func (s *DirectoryNodeService) AddGPOLink(
 	directoryNodeUID string,
 	incomingGPOLink *gpo.Link,
 	actor string,
-) (*core.EntityResult[*gpo.Link], error) {
+) (*res.EntityResult[*gpo.Link], error) {
 
 	panic("implement me")
 }
@@ -260,7 +261,7 @@ func (s *DirectoryNodeService) CreateBuildDefaultDirectoryNodes(ctx context.Cont
 func (s *DirectoryNodeService) GetAllDirectoryNodesInDomain(
 	ctx context.Context,
 	domainUID string,
-) ([]*core.EntityResult[*rpad.DirectoryNode], error) {
+) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
 
 	fields := []string{
 		"uid",
@@ -277,7 +278,7 @@ func (s *DirectoryNodeService) GetAllDirectoryNodesInDomain(
 	}
 
 	// 1. Erste Ebene: Domain --contains--> DirectoryNodes
-	rootNodes, err := db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*rpad.DirectoryNode], error) {
+	rootNodes, err := db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
 		return dgraphutil.GetEntitiesWithAssertions[*rpad.DirectoryNode](
 			ctx, tx, domainUID,
 			core.PredicateContains,
@@ -290,7 +291,7 @@ func (s *DirectoryNodeService) GetAllDirectoryNodesInDomain(
 		return nil, fmt.Errorf("fetching root directory nodes for domain %s: %w", domainUID, err)
 	}
 
-	allResults := make([]*core.EntityResult[*rpad.DirectoryNode], 0, len(rootNodes))
+	allResults := make([]*res.EntityResult[*rpad.DirectoryNode], 0, len(rootNodes))
 	allResults = append(allResults, rootNodes...)
 
 	// 2. Ab hier rekursiv: DirectoryNode --parent--> DirectoryNode
@@ -308,8 +309,8 @@ func (s *DirectoryNodeService) GetAllDirectoryNodesInDomain(
 func (s *DirectoryNodeService) GetAllChildDirectoryNodes(
 	ctx context.Context,
 	parentUID string,
-) ([]*core.EntityResult[*rpad.DirectoryNode], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*rpad.DirectoryNode], error) {
+) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
 
 		fields := []string{
 			"uid",
@@ -340,9 +341,9 @@ func (s *DirectoryNodeService) GetAllChildDirectoryNodes(
 func (s *DirectoryNodeService) GetAllChildrenRecursive(
 	ctx context.Context,
 	rootUID string,
-) ([]*core.EntityResult[*rpad.DirectoryNode], error) {
+) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
 
-	var allResults []*core.EntityResult[*rpad.DirectoryNode]
+	var allResults []*res.EntityResult[*rpad.DirectoryNode]
 	queue := []string{rootUID}
 
 	for len(queue) > 0 {
@@ -369,11 +370,11 @@ func (s *DirectoryNodeService) AddChildDirectoryNode(
 	parentDirectoryNodeUID string,
 	incomingChildDirectoryNode *rpad.DirectoryNode,
 	actor string,
-) (*core.EntityResult[rpad.DirectoryNode], error) {
+) (*res.EntityResult[rpad.DirectoryNode], error) {
 
 	log.Println("[AddChildDirectoryNode] Adding child directory node")
 
-	var result *core.EntityResult[rpad.DirectoryNode]
+	var result *res.EntityResult[rpad.DirectoryNode]
 
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
 
@@ -415,10 +416,10 @@ func (s *DirectoryNodeService) AddChildDirectoryNode(
 		}
 		assertions = append(assertions, createdAssertion)
 
-		result = &core.EntityResult[rpad.DirectoryNode]{
+		result = &res.EntityResult[rpad.DirectoryNode]{
 			Entity:     *createdChildDirNode,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,

@@ -1,9 +1,6 @@
 package model
 
-import (
-	"RedPaths-server/pkg/model/utils"
-	"time"
-)
+import "RedPaths-server/pkg/model/core"
 
 type Project struct {
 	// Internal
@@ -15,12 +12,20 @@ type Project struct {
 	Tags        []string `json:"project.tags,omitempty"`
 	Description string   `json:"project.description,omitempty"`
 
-	// Relations
-	HasAD                     []*utils.UIDRef `json:"has_ad,omitempty"`
-	HashHostWithUnknownDomain []*utils.UIDRef `json:"has_unknown_domain_host,omitempty"`
+	// Targets
+	HasTarget []Target `json:"project.has_target,omitempty"`
 
 	// Meta
-	HasTarget []Target  `json:"project.has_target,omitempty"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	RedPathsMetadata core.RedPathsMetadata `json:"-"`
+}
+
+func (p *Project) UnmarshalJSON(data []byte) error {
+	type Alias Project
+	aux := (*Alias)(p)
+	return core.UnmarshalWithMetadata(data, aux, &p.RedPathsMetadata)
+}
+
+func (p Project) MarshalJSON() ([]byte, error) {
+	type Alias Project
+	return core.MarshalWithMetadata(Alias(p), p.RedPathsMetadata)
 }

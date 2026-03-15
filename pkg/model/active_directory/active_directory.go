@@ -2,7 +2,6 @@ package active_directory
 
 import (
 	"RedPaths-server/pkg/model/core"
-	"RedPaths-server/pkg/model/utils"
 )
 
 type ActiveDirectory struct {
@@ -16,7 +15,7 @@ type ActiveDirectory struct {
 	ForestFunctionalLevel string `json:"active_directory.forest_functional_level,omitempty"`
 
 	// Relations
-	HasDomain []*utils.UIDRef `json:"active_directory.has_domain,omitempty"`
+	//HasDomain []*utils.UIDRef `json:"active_directory.has_domain,omitempty"`
 
 	// Meta
 	RedPathsMetadata core.RedPathsMetadata `json:"-"`

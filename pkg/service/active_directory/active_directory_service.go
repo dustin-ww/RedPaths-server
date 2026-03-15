@@ -8,6 +8,7 @@ import (
 	rpap "RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/active_directory/priv"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"RedPaths-server/pkg/model/utils/assertion"
 	"context"
@@ -58,9 +59,9 @@ func (s *ActiveDirectoryService) AddDomain(
 	incomingDomain *rpap.Domain,
 	assertionCtx assertion.Context,
 	actor string,
-) (*core.EntityResult[*rpap.Domain], error) {
+) (*res.EntityResult[*rpap.Domain], error) {
 
-	var result *core.EntityResult[*rpap.Domain]
+	var result *res.EntityResult[*rpap.Domain]
 
 	log.Printf("[AddDomain] name=%s, activeDirectoryUID=%s, actor=%s",
 		incomingDomain.Name, activeDirectoryUID, actor)
@@ -138,10 +139,10 @@ func (s *ActiveDirectoryService) AddDomain(
 		// }
 
 		// 4. Build result
-		result = &core.EntityResult[*rpap.Domain]{
+		result = &res.EntityResult[*rpap.Domain]{
 			Entity:     domain,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -159,8 +160,8 @@ func (s *ActiveDirectoryService) AddDomain(
 	return result, nil
 }
 
-func (s *ActiveDirectoryService) GetAllDomains(ctx context.Context, activeDirectoryUID string) ([]*core.EntityResult[*rpap.Domain], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*rpap.Domain], error) {
+func (s *ActiveDirectoryService) GetAllDomains(ctx context.Context, activeDirectoryUID string) ([]*res.EntityResult[*rpap.Domain], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpap.Domain], error) {
 		return s.domainRepo.GetAllByActiveDirectoryUID(ctx, tx, activeDirectoryUID)
 	})
 }

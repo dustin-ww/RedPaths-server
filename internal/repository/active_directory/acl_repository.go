@@ -4,6 +4,7 @@ import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model/active_directory/priv"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	"context"
 	"fmt"
 	"log"
@@ -26,7 +27,7 @@ type ACLRepository interface {
 	DeleteACE(ctx context.Context, tx *dgo.Txn, aceUID string) error
 	UpdateACE(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*priv.ACE, error)
 
-	GetAllACEByACL(ctx context.Context, tx *dgo.Txn, aclUID string) ([]*core.EntityResult[*priv.ACE], error)
+	GetAllACEByACL(ctx context.Context, tx *dgo.Txn, aclUID string) ([]*res.EntityResult[*priv.ACE], error)
 
 	// ADRight
 	CreateADRight(ctx context.Context, tx *dgo.Txn, ace *priv.ADRight, actor string) (*priv.ADRight, error)
@@ -34,7 +35,7 @@ type ACLRepository interface {
 	DeleteADRight(ctx context.Context, tx *dgo.Txn, adRightUID string) error
 	UpdateADRight(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*priv.ADRight, error)
 
-	GetAllRightsByACE(ctx context.Context, tx *dgo.Txn, aceUID string) ([]*core.EntityResult[*priv.ADRight], error)
+	GetAllRightsByACE(ctx context.Context, tx *dgo.Txn, aceUID string) ([]*res.EntityResult[*priv.ADRight], error)
 	// Finds
 	//FindByDistinguishedNameInDomain(ctx context.Context, tx *dgo.Txn, domainUID string, dsName string) (*active_directory.DirectoryNode, error)
 
@@ -85,6 +86,7 @@ func NewDgraphDgraphACLRepository(db *dgo.Dgraph) *DgraphACLRepository {
 // ACL
 func (r *DgraphACLRepository) CreateACL(ctx context.Context, tx *dgo.Txn, acl *priv.ACL, actor string) (*priv.ACL, error) {
 	dgraphutil.InitCreateMetadata(&acl.RedPathsMetadata, actor)
+	log.Println("Create ACL")
 	return dgraphutil.CreateEntity(ctx, tx, "ACL", acl)
 }
 
@@ -177,7 +179,7 @@ func (r *DgraphDirectoryNodeRepository) DeleteADRight(ctx context.Context, tx *d
 	panic("implement me")
 }
 
-func (r *DgraphACLRepository) GetAllACEByACL(ctx context.Context, tx *dgo.Txn, aclUID string) ([]*core.EntityResult[*priv.ACE], error) {
+func (r *DgraphACLRepository) GetAllACEByACL(ctx context.Context, tx *dgo.Txn, aclUID string) ([]*res.EntityResult[*priv.ACE], error) {
 	fields := []string{
 		"uid",
 		"ace.name",
@@ -202,7 +204,7 @@ func (r *DgraphACLRepository) GetAllACEByACL(ctx context.Context, tx *dgo.Txn, a
 	)
 }
 
-func (r *DgraphACLRepository) GetAllRightsByACE(ctx context.Context, tx *dgo.Txn, aceUID string) ([]*core.EntityResult[*priv.ADRight], error) {
+func (r *DgraphACLRepository) GetAllRightsByACE(ctx context.Context, tx *dgo.Txn, aceUID string) ([]*res.EntityResult[*priv.ADRight], error) {
 	fields := []string{
 		"uid",
 		"ad_right.name",

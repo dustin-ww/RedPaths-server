@@ -4,6 +4,7 @@ import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	"context"
 	"fmt"
 	"log"
@@ -16,7 +17,9 @@ type ServiceRepository interface {
 	Create(ctx context.Context, tx *dgo.Txn, model *model.Service, actor string) (*model.Service, error)
 	Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Service, error)
 	UpdateService(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Service, error)
-	GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*core.EntityResult[*model.Service], error)
+	GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*res.EntityResult[*model.Service], error)
+
+	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*model.Service], error)
 	//Relations
 	/*	LinkToHost(ctx context.Context, tx *dgo.Txn, serviceUID, hostUID string) error
 		GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*model.Service, error)*/
@@ -28,7 +31,7 @@ type DgraphServiceRepository struct {
 
 func (r *DgraphServiceRepository) Create(ctx context.Context, tx *dgo.Txn, service *model.Service, actor string) (*model.Service, error) {
 	dgraphutil.InitCreateMetadata(&service.RedPathsMetadata, actor)
-	return dgraphutil.CreateEntity(ctx, tx, "service", service)
+	return dgraphutil.CreateEntity(ctx, tx, "Service", service)
 }
 
 func (r *DgraphServiceRepository) UpdateService(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Service, error) {
@@ -41,6 +44,30 @@ func NewDgraphServiceRepository(db *dgo.Dgraph) *DgraphServiceRepository {
 
 func (r *DraphHostRepository) ServiceExistsByPortOnHost(ctx context.Context, tx *dgo.Txn, projectUID, ip string) (bool, error) {
 	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "Host", "ip", ip)
+}
+
+func (r *DgraphServiceRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*model.Service], error) {
+	fields := []string{
+		"uid",
+		"service.name",
+		"service.port",
+		"created_at",
+		"modified_at",
+		"dgraph.type",
+	}
+
+	return dgraphutil.GetEntitiesWithAssertionsNHop[*model.Service](
+		ctx, tx, projectUID,
+		[]dgraphutil.HopConfig{
+			{Predicate: core.PredicateHasActiveDirectory},
+			{Predicate: core.PredicateHasDomain, ObjectType: "Domain"},
+			{Predicate: core.PredicateHasHost, ObjectType: "Host"},
+			{Predicate: core.PredicateRuns, ObjectType: "Service"},
+		},
+
+		fields, "getProjectServices",
+	)
+
 }
 
 func (r *DgraphServiceRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Service, error) {
@@ -69,7 +96,7 @@ func (r *DgraphServiceRepository) LinkToHost(ctx context.Context, tx *dgo.Txn, s
 }
 
 // TODO -> history runs on hosts (remove s)
-func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*core.EntityResult[*model.Service], error) {
+func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn, hostUID string) ([]*res.EntityResult[*model.Service], error) {
 	fields := []string{
 		"uid",
 		"service.name",

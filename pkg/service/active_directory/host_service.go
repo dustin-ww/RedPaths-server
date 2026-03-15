@@ -8,6 +8,7 @@ import (
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"RedPaths-server/pkg/model/utils/assertion"
 	"context"
@@ -48,9 +49,9 @@ func (s *HostService) AddService(
 	ctx context.Context,
 	assertionCtx assertion.Context,
 	hostUID string,
-	incomingService *model.Service, actor string) (*core.EntityResult[model.Service], error) {
+	incomingService *model.Service, actor string) (*res.EntityResult[model.Service], error) {
 	log.Println("Starting adding service")
-	var result *core.EntityResult[model.Service]
+	var result *res.EntityResult[model.Service]
 
 	log.Printf("Adding service %s to host %s", actor, incomingService.Name)
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
@@ -105,10 +106,10 @@ func (s *HostService) AddService(
 
 		assertions = append(assertions, createdAssertion)
 
-		result = &core.EntityResult[model.Service]{
+		result = &res.EntityResult[model.Service]{
 			Entity:     *service,
 			Assertions: assertions,
-			Metadata: &core.ResultMetadata{
+			Metadata: &res.ResultMetadata{
 				Source:         actor,
 				ScanTimestamp:  time.Now(),
 				EntityCount:    1,
@@ -140,8 +141,8 @@ func (s *HostService) CreateWithUnknownDomain(ctx context.Context, host *model.H
 	return hostUID, err
 }
 
-func (s *HostService) GetAllServicesByHost(ctx context.Context, hostUID string) ([]*core.EntityResult[*model.Service], error) {
-	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*core.EntityResult[*model.Service], error) {
+func (s *HostService) GetAllServicesByHost(ctx context.Context, hostUID string) ([]*res.EntityResult[*model.Service], error) {
+	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*model.Service], error) {
 		return s.serviceRepo.GetByHostUID(ctx, tx, hostUID)
 	})
 }

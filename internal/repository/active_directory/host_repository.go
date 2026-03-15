@@ -4,8 +4,8 @@ import (
 	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/model/core"
+	"RedPaths-server/pkg/model/core/res"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -20,13 +20,13 @@ type HostRepository interface {
 	AddToDomain(ctx context.Context, tx *dgo.Txn, hostUID string, domainUID string) error
 	FindByIPInDomain(ctx context.Context, tx *dgo.Txn, domainUID string, ip string) (*model.Host, error)
 
-	GetByProjectIncludingDomains(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error)
+	GetByProjectIncludingDomains(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*model.Host], error)
 
 	// HOSTS WITH UNDEFINED DOMAIN
 	GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*model.Host, error)
 
 	// HOSTS WITH KNOWN/DISCOVERED DOMAIN
-	GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*core.EntityResult[*model.Host], error)
+	GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*res.EntityResult[*model.Host], error)
 
 	UpdateHost(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Host, error)
 }
@@ -54,89 +54,28 @@ func NewDgraphHostRepository(db *dgo.Dgraph) *DraphHostRepository {
 func (r *DraphHostRepository) GetByProjectIncludingDomains(ctx context.Context,
 	tx *dgo.Txn,
 	projectUID string,
-) ([]*model.Host, error) {
+) ([]*res.EntityResult[*model.Host], error) {
 
-	if tx == nil {
-		return nil, fmt.Errorf("transaction cannot be nil")
+	fields := []string{
+		"uid",
+		"host.name",
+		"host.ip",
+		"created_at",
+		"modified_at",
+		"dgraph.type",
 	}
 
-	query := `
-	query HostsByProject($pid: string) {
-		project(func: uid($pid)) {
-			has_host {
-				uid
-				ip
-				name
-				net_bios_name
-				belongs_to_domain { uid }
-				dgraph.type
-			}
-			has_domain {
-				has_host {
-					uid
-					ip
-					name
-					net_bios_name
-					belongs_to_domain { uid }
-					dgraph.type
-				}
-			}
-		}
-	}`
+	return dgraphutil.GetEntitiesWithAssertionsNHop[*model.Host](
+		ctx, tx, projectUID,
+		[]dgraphutil.HopConfig{
+			{Predicate: core.PredicateHasActiveDirectory},
+			{Predicate: core.PredicateHasDomain, ObjectType: "Domain"},
+			{Predicate: core.PredicateHasHost, ObjectType: "Host"},
+		},
 
-	resp, err := tx.QueryWithVars(ctx, query, map[string]string{
-		"$pid": projectUID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("query hosts by project failed: %w", err)
-	}
+		fields, "getDomainHosts",
+	)
 
-	// Response Mapping
-	type domainWrapper struct {
-		HasHost []*model.Host `json:"has_host"`
-	}
-
-	type projectWrapper struct {
-		HasHost   []*model.Host   `json:"has_host"`
-		HasDomain []domainWrapper `json:"has_domain"`
-	}
-
-	var result struct {
-		Project []projectWrapper `json:"project"`
-	}
-
-	if err := json.Unmarshal(resp.Json, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal project hosts failed: %w", err)
-	}
-
-	// --- Deduplicate Hosts by UID ---
-	hostMap := make(map[string]*model.Host)
-
-	for _, project := range result.Project {
-
-		// hosts directly linked to project
-		for _, host := range project.HasHost {
-			if host.UID != "" {
-				hostMap[host.UID] = host
-			}
-		}
-
-		// hosts linked via domains
-		for _, domain := range project.HasDomain {
-			for _, host := range domain.HasHost {
-				if host.UID != "" {
-					hostMap[host.UID] = host
-				}
-			}
-		}
-	}
-
-	hosts := make([]*model.Host, 0, len(hostMap))
-	for _, host := range hostMap {
-		hosts = append(hosts, host)
-	}
-
-	return hosts, nil
 }
 
 func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *model.Host, actor string) (string, error) {
@@ -149,7 +88,7 @@ func (r *DraphHostRepository) Create(ctx context.Context, tx *dgo.Txn, host *mod
 }
 
 // WITH DOMAIN
-func (r *DraphHostRepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*core.EntityResult[*model.Host], error) {
+func (r *DraphHostRepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn, domainUID string) ([]*res.EntityResult[*model.Host], error) {
 	fields := []string{
 		"uid",
 		"host.ip",

@@ -40,6 +40,7 @@ func RegisterProjectHandlers(
 	dirNodeHandler := handlers.NewDirectoryNodeHandler(dirNodeService)
 	adHandler := handlers.NewActiveDirectoryHandler(activeDirectoryService)
 
+	router.Use(middleware.StripDgraphPrefixMiddleware)
 	projects := router.Group("/projects")
 	{
 		projects.GET("", projectHandler.GetProjectOverviews)
@@ -64,6 +65,7 @@ func RegisterProjectHandlers(
 			//project.GET("/domains", adHandler.GetDomains) TODO implement
 			//project.POST("/domains", adHandler.AddDomain) TODO implement
 
+			project.GET("/domains/", projectHandler.GetDomains)
 			project.PATCH("/domains/:domainUID", domainHandler.UpdateDomain)
 			project.GET("/domains/:domainUID/hosts", domainHandler.GetHosts)
 			project.POST("/domains/:domainUID/hosts", domainHandler.AddHost)
@@ -71,12 +73,14 @@ func RegisterProjectHandlers(
 			project.POST("/domains/:domainUID/directory-nodes", domainHandler.AddDirectoryNode)
 			project.GET("/domains/:domainUID/directory-nodes/all", domainHandler.GetDeepChildDirectoryNodes)
 
-			project.GET("/domains/:domainUID/gpolinks", domainHandler.GetDirectoryNodes)
+			project.GET("/domains/:domainUID/gpos", domainHandler.GetGPOs)
+			project.POST("/domains/:domainUID/gpos", domainHandler.LinkGPO)
 			//project.POST("/domains/:domainUID/users", domainHandler.)
 
 			// --- Directory Nodes (OU / Container) ---
-			/*project.GET("/directory-nodes", dirNodeHandler.GetDirectoryNodes)
-			project.GET("/directory-nodes/details")*/
+			project.GET("/directory-nodes", projectHandler.GetDirectoryNodes)
+
+			//project.GET("/directory-nodes/details")
 			//project.POST("/directory-nodes", dirNodeHandler.CreateDirectoryNode) TODO implement
 			/*project.GET("/directory-nodes/:dirNodeUID", dirNodeHandler.GetDirectoryNode)*/
 			project.PATCH("/directory-nodes/:dirNodeUID", dirNodeHandler.UpdateDirectoryNode)
@@ -98,6 +102,9 @@ func RegisterProjectHandlers(
 			project.GET("/hosts/:hostUID/services", serviceHandler.GetServices)
 			project.POST("/hosts/:hostUID/services", hostHandler.AddService)
 			project.PATCH("/services/:serviceUID", serviceHandler.UpdateService)
+
+			// --- Services ---
+			project.GET("/services", projectHandler.GetServices)
 
 			// --- Users ---
 			project.GET("/users", projectHandler.GetUsers)
