@@ -193,14 +193,11 @@ func (h *ProjectHandler) CreateProject(c *gin.Context) {
 // UpdateProject updates fields of an existing project.
 func (h *ProjectHandler) UpdateProject(c *gin.Context) {
 	project := restcontext.Project(c)
-	var fieldsToUpdate map[string]interface{}
+	mappedFields := c.MustGet("mappedFields").(map[string]interface{})
 
-	if err := c.BindJSON(&fieldsToUpdate); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "INVALID_JSON"})
-		return
-	}
-
-	updatedProject, err := h.projectService.UpdateProject(c.Request.Context(), project.UID, "UserInput", fieldsToUpdate)
+	updatedProject, err := h.projectService.UpdateProject(
+		c.Request.Context(), project.UID, "UserInput", mappedFields,
+	)
 
 	if err != nil {
 		log.Printf("Sending 500 response while updating project because: %v", err)

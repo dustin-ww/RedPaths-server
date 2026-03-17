@@ -88,6 +88,21 @@ func (h *DomainHandler) GetGPOs(c *gin.Context) {
 	c.JSON(http.StatusOK, gpos)
 }
 
+func (h *DomainHandler) GetGPOLib(c *gin.Context) {
+	//domain := restcontext.Domain(c)
+	domainUID := c.Param("domainUID")
+
+	gpos, err := h.domainService.GetDomainGPOs(
+		c.Request.Context(),
+		domainUID)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gpos)
+}
+
 func (h *DomainHandler) GetDirectoryNodes(c *gin.Context) {
 	domainUID := c.Param("domainUID")
 

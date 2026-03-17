@@ -51,7 +51,7 @@ func RegisterProjectHandlers(
 		project.Use(middleware.ProjectContext(projectService))
 		{
 			project.GET("", projectHandler.Get)
-			project.PATCH("", projectHandler.UpdateProject)
+			project.PATCH("", middleware.AddPrefixMiddleware("project"), projectHandler.UpdateProject)
 
 			// --- Active Directories ---
 			project.GET("/active-directories", projectHandler.GetActiveDirectories)
@@ -75,6 +75,7 @@ func RegisterProjectHandlers(
 
 			project.GET("/domains/:domainUID/gpos", domainHandler.GetGPOs)
 			project.POST("/domains/:domainUID/gpos", domainHandler.LinkGPO)
+			project.GET("/domains/:domainUID/gpos/all", domainHandler.GetGPOLib)
 			//project.POST("/domains/:domainUID/users", domainHandler.)
 
 			// --- Directory Nodes (OU / Container) ---

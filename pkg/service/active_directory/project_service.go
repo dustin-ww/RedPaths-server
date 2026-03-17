@@ -256,7 +256,7 @@ func (s *ProjectService) UpdateProject(ctx context.Context, uid, actor string, f
 		return nil, utils.ErrUIDRequired
 	}
 
-	allowed := map[string]bool{"name": true, "description": true}
+	allowed := map[string]bool{"project.name": true, "project.description": true}
 	protected := map[string]bool{"uid": true, "created_at": true, "updated_at": true, "type": true}
 
 	for field := range fields {
