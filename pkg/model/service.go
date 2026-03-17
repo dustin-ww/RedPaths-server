@@ -44,3 +44,30 @@ func (s Service) MarshalJSON() ([]byte, error) {
 	type Alias Service
 	return core.MarshalWithMetadata(Alias(s), s.RedPathsMetadata)
 }
+
+type ServiceBuilder struct {
+	service *Service
+}
+
+func NewServiceBuilder() *ServiceBuilder {
+	return &ServiceBuilder{
+		service: &Service{},
+	}
+}
+
+// Set Name
+func (b *ServiceBuilder) WithName(name string) *ServiceBuilder {
+	b.service.Name = name
+	return b
+}
+
+// Set Port
+func (b *ServiceBuilder) WithPort(port string) *ServiceBuilder {
+	b.service.Port = port
+	return b
+}
+
+// Build
+func (b *ServiceBuilder) Build() *Service {
+	return b.service
+}

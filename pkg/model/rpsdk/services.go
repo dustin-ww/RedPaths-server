@@ -10,9 +10,10 @@ import (
 )
 
 type Services struct {
-	ProjectService active_directory.ProjectService
-	DomainService  active_directory.DomainService
-	HostService    active_directory.HostService
+	ProjectService         active_directory.ProjectService
+	DomainService          active_directory.DomainService
+	HostService            active_directory.HostService
+	ActiveDirectoryService active_directory.ActiveDirectoryService
 }
 
 func NewServicesContainer(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) *Services {
@@ -31,9 +32,15 @@ func NewServicesContainer(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) *Services
 		log.Fatalf("Failed to initialize HostService for redpaths sdk: %v", err)
 	}
 
+	activeDirectoryService, err := active_directory.NewActiveDirectoryService(dgraphCon)
+	if err != nil {
+		log.Fatalf("Failed to initialize ActiveDirectoryService for redpaths sdk: %v", err)
+	}
+
 	return &Services{
-		ProjectService: *projectService,
-		DomainService:  *domainService,
-		HostService:    *hostService,
+		ProjectService:         *projectService,
+		DomainService:          *domainService,
+		HostService:            *hostService,
+		ActiveDirectoryService: *activeDirectoryService,
 	}
 }
