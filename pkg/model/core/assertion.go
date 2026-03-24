@@ -21,31 +21,39 @@ const (
 	PredicateDetectedByScan     Predicate = "detected_by_scan" // z.B. via Scan erkannt
 	PredicateCompromised        Predicate = "compromised"      // z.B. Sicherheitsereignis
 	PredicateContains           Predicate = "contains"
+	PredicateDerives            Predicate = "derives"
 	PredicateLocates            Predicate = "locates"
 	PredicateHasGPOLink         Predicate = "has_gpo_link"
 	PredicateParent             Predicate = "parent"
 	PredicateRuns               Predicate = "runs"
 	PredicateLinksTo            Predicate = "links_to"
+	PredicateHasOrphanedEntity  Predicate = "has_orphaned_entity"
+	PredicatePossibleDuplicate  Predicate = "possible_duplicate"
+	PredicateHasGroup           Predicate = "has_group"
+	PredicateHasUser            Predicate = "has_user"
 )
 
 // ----------------------
 // Methods
 // ----------------------
 const (
-	MethodDirectAdd    Method = "direct_add"    // Manuelle Erstellung
-	MethodScanDetected Method = "scan_detected" // Scan-basiert
-	MethodImported     Method = "imported"      // Importiert aus externen Quellen
-	MethodInference    Method = "inferred"      // Vom System abgeleitet
+	MethodDirectAdd    Method = "direct_add"
+	MethodScanDetected Method = "scan_detected"
+	MethodImported     Method = "imported"
+	MethodInferred     Method = "inferred"
+	MethodPromotion    Method = "promotion" // from orphaned to placed
+
 )
 
 // ----------------------
 // Status
 // ----------------------
 const (
-	StatusValidated   Status = "direct_add"
-	StatusTentative   Status = "scan_detected"
-	StatusInvalidated Status = "imported"
-	StatusExpired     Status = "inferred"
+	StatusValidated   Status = "validated"
+	StatusTentative   Status = "tentative"
+	StatusInvalidated Status = "invalidated"
+	StatusExpired     Status = "expired"
+	StatusOrphaned    Status = "orphaned"
 )
 
 type Assertion struct {

@@ -3,7 +3,8 @@ package active_directory
 import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
-	"RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/repository/redpaths/engine"
+	dgraphutil "RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	rpad "RedPaths-server/pkg/model/active_directory"
@@ -13,6 +14,8 @@ import (
 	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"RedPaths-server/pkg/model/utils/assertion"
+	engine3 "RedPaths-server/pkg/service/catalog"
+	engine4 "RedPaths-server/pkg/service/upsert"
 	"context"
 	"fmt"
 	"log"
@@ -25,9 +28,10 @@ type DomainService struct {
 	domainRepo        active_directory.DomainRepository
 	hostRepo          active_directory.HostRepository
 	directoryNodeRepo active_directory.DirectoryNodeRepository
-	assertionRepo     redpaths.AssertionRepository
+	assertionRepo     engine.AssertionRepository
 	aclRepo           active_directory.ACLRepository
 	gpoRepo           active_directory.GPORepository
+	catalogService    *engine3.CatalogService
 
 	db *dgo.Dgraph
 }
@@ -36,9 +40,10 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 	domainRepo := active_directory.NewDgraphDomainRepository(dgraphCon)
 	hostRepo := active_directory.NewDgraphHostRepository(dgraphCon)
 	directoryNodeRepo := active_directory.NewDgraphDirectoryNodeRepository(dgraphCon)
-	assertionRepo := redpaths.NewDgraphAssertionRepository(dgraphCon)
+	assertionRepo := engine.NewDgraphAssertionRepository(dgraphCon)
 	aclRepo := active_directory.NewDgraphDgraphACLRepository(dgraphCon)
 	gpoRepo := active_directory.NewDgraphGPORepository(dgraphCon)
+	catalogService := engine3.NewCatalogService(dgraphCon)
 
 	return &DomainService{
 		db:                dgraphCon,
@@ -48,6 +53,7 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 		assertionRepo:     assertionRepo,
 		aclRepo:           aclRepo,
 		gpoRepo:           gpoRepo,
+		catalogService:    catalogService,
 	}, nil
 }
 
@@ -59,7 +65,7 @@ func (s *DomainService) AddHost(
 	actor string,
 ) (*res.EntityResult[*model.Host], error) {
 
-	log.Println("[AddHost]")
+	log.Println("[AddDomainHost]")
 
 	var result *res.EntityResult[*model.Host]
 
@@ -75,7 +81,7 @@ func (s *DomainService) AddHost(
 		if existingHost != nil {
 			actualHost = existingHost
 			log.Printf(
-				"[AddHost] Reusing existing host uid=%s ip=%s",
+				"[AddDomainHost] Reusing existing host uid=%s ip=%s",
 				actualHost.UID,
 				actualHost.IP,
 			)
@@ -85,10 +91,10 @@ func (s *DomainService) AddHost(
 				return fmt.Errorf("creating host: %w", err)
 			}
 			actualHost = host
-			actualHost.UID = actualHostUID
+			actualHost.UID = actualHostUID.UID
 
 			log.Printf(
-				"[AddHost] Created host uid=%s ip=%s name=%s",
+				"[AddDomainHost] Created host uid=%s ip=%s name=%s",
 				actualHost.UID,
 				actualHost.IP,
 				actualHost.Name,
@@ -129,7 +135,7 @@ func (s *DomainService) AddHost(
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("AddHost failed: %w", err)
+		return nil, fmt.Errorf("AddDomainHost failed: %w", err)
 	}
 
 	return result, nil
@@ -143,7 +149,7 @@ func (s *DomainService) AddDirectoryNode(
 	actor string,
 ) (*res.EntityResult[*rpad.DirectoryNode], error) {
 
-	log.Println("[AddDirectoryNode]")
+	log.Println("[AddDomainDirectoryNode]")
 
 	var result *res.EntityResult[*rpad.DirectoryNode]
 
@@ -169,7 +175,7 @@ func (s *DomainService) AddDirectoryNode(
 			// Reuse existing node
 			directoryNode = existingDirectoryNode
 			log.Printf(
-				"[AddDirectoryNode] Reusing existing directory node uid=%s dn=%s",
+				"[AddDomainDirectoryNode] Reusing existing directory node uid=%s dn=%s",
 				directoryNode.UID,
 				directoryNode.DistinguishedName,
 			)
@@ -187,7 +193,7 @@ func (s *DomainService) AddDirectoryNode(
 			}
 
 			log.Printf(
-				"[AddDirectoryNode] Created directory node uid=%s dn=%s",
+				"[AddDomainDirectoryNode] Created directory node uid=%s dn=%s",
 				directoryNode.UID,
 				directoryNode.DistinguishedName,
 			)
@@ -243,7 +249,7 @@ func (s *DomainService) AddDirectoryNode(
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("AddDirectoryNode failed: %w", err)
+		return nil, fmt.Errorf("AddDomainDirectoryNode failed: %w", err)
 	}
 
 	return result, nil
@@ -358,7 +364,7 @@ func (s *DomainService) LinkGPO(ctx context.Context, assertionCtx assertion.Cont
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("AddDirectoryNode failed: %w", err)
+		return nil, fmt.Errorf("AddDomainDirectoryNode failed: %w", err)
 	}
 
 	return result, nil
@@ -382,6 +388,240 @@ func (s *DomainService) GetDomainDirectoryNodes(ctx context.Context, domainUID s
 		return s.directoryNodeRepo.GetAllByDomainUID(ctx, tx, domainUID)
 	})
 }
+
+// -----------------------------------------------------------------------------
+// UpsertDomain
+// -----------------------------------------------------------------------------
+
+func (s *DomainService) UpsertDomain(
+	ctx context.Context,
+	input engine4.Input[*rpad.Domain],
+) (*res.EntityResult[*rpad.Domain], error) {
+
+	subjectUID, subjectType, hasParent := input.Resolved()
+
+	var result *res.EntityResult[*rpad.Domain]
+
+	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
+		// --- Existence Check ---
+		existence, err := s.domainRepo.FindExisting(ctx, tx, input.ProjectUID, input.Entity)
+		if err != nil {
+			return fmt.Errorf("existence check failed: %w", err)
+		}
+
+		filters := active_directory.BuildDomainFilter(input.Entity)
+		var actualDomain *rpad.Domain
+
+		switch existence.FoundVia {
+
+		// --- Case 1: Not found → create new ---
+		case dgraphutil.ExistenceSourceNotFound:
+			createdDomain, err := s.domainRepo.Create(ctx, tx, input.Entity, input.Actor)
+			if err != nil {
+				return fmt.Errorf("creating domain: %w", err)
+			}
+			actualDomain = createdDomain
+			log.Printf("[UpsertDomain] Created uid=%s name=%s", actualDomain.UID, actualDomain.Name)
+
+		case dgraphutil.ExistenceSourceHierarchy,
+			dgraphutil.ExistenceSourceProject:
+
+			best := dgraphutil.BestCandidate(existence.Entities, filters, 0.5)
+
+			if best == nil {
+				// Candidates found but score too low → create new
+				createdDomain, err := s.domainRepo.Create(ctx, tx, input.Entity, input.Actor)
+				if err != nil {
+					return fmt.Errorf("creating domain (low score): %w", err)
+				}
+				actualDomain = createdDomain
+				log.Printf("[UpsertDomain] Low score, created uid=%s", actualDomain.UID)
+
+			} else if best.Score >= 0.8 {
+				// --- Case 2: High Confidence → Merge ---
+				mergeFields := buildDomainMergeFields(
+					best.Result.Entity,
+					input.Entity,
+					input.AssertionCtx.GetConfidence(),
+				)
+				updated, err := s.domainRepo.Update(
+					ctx, tx,
+					best.Result.Entity.UID,
+					input.Actor,
+					mergeFields,
+				)
+				if err != nil {
+					return fmt.Errorf("merging domain: %w", err)
+				}
+				actualDomain = updated
+				log.Printf("[UpsertDomain] Merged uid=%s score=%.2f",
+					actualDomain.UID, best.Score)
+
+			} else {
+				// --- Case 3: Medium Confidence (0.5–0.8) → Possible Duplicate ---
+				log.Printf("[UpsertDomain] Possible duplicate uid=%s score=%.2f",
+					best.Result.Entity.UID, best.Score)
+
+				duplicateAssertion := &core.Assertion{
+					Predicate:  core.PredicatePossibleDuplicate,
+					Method:     core.MethodInferred,
+					Source:     input.Actor,
+					Confidence: best.Score,
+					Status:     core.StatusTentative,
+					Timestamp:  time.Now(),
+					Note: fmt.Sprintf(
+						"Possible duplicate detected with score %.2f — manual review required",
+						best.Score,
+					),
+					HasDiscoveredParent: false,
+					MarkedAsHighValue:   false,
+					Subject:             &utils2.UIDRef{UID: best.Result.Entity.UID, Type: "Domain"},
+					Object:              &utils2.UIDRef{UID: input.Entity.UID, Type: "Domain"},
+				}
+
+				if _, err := s.assertionRepo.Create(ctx, tx, duplicateAssertion); err != nil {
+					return fmt.Errorf("creating duplicate assertion: %w", err)
+				}
+
+				result = best.Result
+				return nil
+			}
+
+		default:
+			return fmt.Errorf("unhandled existence state: %s", existence.FoundVia)
+		}
+
+		// --- Create assertion ---
+		assertionSchema := &core.Assertion{
+			Predicate:           core.PredicateHasDomain,
+			Method:              core.MethodDirectAdd,
+			Source:              input.Actor,
+			Confidence:          input.AssertionCtx.GetConfidence(),
+			Status:              core.StatusValidated,
+			Timestamp:           time.Now(),
+			HasDiscoveredParent: hasParent,
+			MarkedAsHighValue:   input.AssertionCtx.IsHighValue(),
+			Subject:             &utils2.UIDRef{UID: subjectUID, Type: subjectType},
+			Object:              &utils2.UIDRef{UID: actualDomain.UID, Type: "Domain"},
+		}
+
+		createdAssertion, err := s.assertionRepo.Create(ctx, tx, assertionSchema)
+		if err != nil {
+			return fmt.Errorf("creating assertion: %w", err)
+		}
+
+		result = &res.EntityResult[*rpad.Domain]{
+			Entity:     actualDomain,
+			Assertions: []*core.Assertion{createdAssertion},
+			Metadata: &res.ResultMetadata{
+				Source:         input.Actor,
+				ScanTimestamp:  time.Now(),
+				EntityCount:    1,
+				AssertionCount: 1,
+			},
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("UpsertDomain failed: %w", err)
+	}
+
+	// --- Catalog Integration (outside the transaction) ---
+	if result == nil || len(result.Assertions) == 0 {
+		return result, nil
+	}
+
+	_, catalogErr := engine3.AddToCatalog(
+		ctx,
+		s.catalogService,
+		input.ProjectUID,
+		result.Entity.UID,
+		"Domain",
+		result.Assertions[0],
+		input.Actor,
+	)
+	if catalogErr != nil {
+		log.Printf("[UpsertDomain] Warning: failed to add domain %s to catalog: %v",
+			result.Entity.UID, catalogErr)
+	}
+
+	if hasParent {
+		promoteErr := engine3.PromoteInCatalog(
+			ctx,
+			s.catalogService,
+			input.ProjectUID,
+			result.Entity.UID,
+			"Domain",
+			core.PredicateHasDomain,
+			input.Actor,
+		)
+		if promoteErr != nil {
+			log.Printf("[UpsertDomain] Warning: failed to promote domain %s in catalog: %v",
+				result.Entity.UID, promoteErr)
+		}
+	}
+
+	return result, nil
+}
+
+// -----------------------------------------------------------------------------
+// buildDomainMergeFields
+// -----------------------------------------------------------------------------
+
+func buildDomainMergeFields(
+	existing *rpad.Domain,
+	incoming *rpad.Domain,
+	incomingConfidence float64,
+) map[string]interface{} {
+	fields := map[string]interface{}{
+		"last_seen_at": time.Now(),
+	}
+
+	// Name: overwrite if incoming set and existing empty
+	if incoming.Name != "" && existing.Name == "" {
+		fields["domain.name"] = incoming.Name
+	}
+
+	// DNS name: overwrite if incoming set and existing empty
+	if incoming.DNSName != "" && existing.DNSName == "" {
+		fields["domain.dns_name"] = incoming.DNSName
+	}
+
+	// NetBIOS name: overwrite if incoming set and existing empty
+	if incoming.NetBiosName != "" && existing.NetBiosName == "" {
+		fields["domain.netbios_name"] = incoming.NetBiosName
+	}
+
+	// GUID: truly unique identifier — only set once, never overwrite
+	if incoming.DomainGUID != "" && existing.DomainGUID == "" {
+		fields["domain.domain_guid"] = incoming.DomainGUID
+	}
+
+	// SID: truly unique identifier — only set once, never overwrite
+	if incoming.DomainSID != "" && existing.DomainSID == "" {
+		fields["domain.domain_sid"] = incoming.DomainSID
+	}
+
+	// Functional level: overwrite if incoming set, high confidence, or existing empty
+	if incoming.DomainFunctionalLevel != "" &&
+		(existing.DomainFunctionalLevel == "" || incomingConfidence >= 0.8) {
+		fields["domain.functional_level"] = incoming.DomainFunctionalLevel
+	}
+
+	// Forest functional level: same rule
+	if incoming.ForestFunctionalLevel != "" &&
+		(existing.ForestFunctionalLevel == "" || incomingConfidence >= 0.8) {
+		fields["domain.forest_functional_level"] = incoming.ForestFunctionalLevel
+	}
+
+	return fields
+}
+
+// -----------------------------------------------------------------------------
+// UpdateDomain
+// -----------------------------------------------------------------------------
 
 func (s *DomainService) UpdateDomain(ctx context.Context, uid, actor string, fields map[string]interface{}) (*rpad.Domain, error) {
 	if uid == "" {

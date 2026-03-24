@@ -27,7 +27,7 @@ func NewServicesContainer(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) *Services
 		log.Fatalf("Failed to initialize DomainService for redpaths sdk: %v", err)
 	}
 
-	hostService, err := active_directory.NewHostService(dgraphCon)
+	hostService, err := active_directory.NewHostService(dgraphCon, postgresCon)
 	if err != nil {
 		log.Fatalf("Failed to initialize HostService for redpaths sdk: %v", err)
 	}

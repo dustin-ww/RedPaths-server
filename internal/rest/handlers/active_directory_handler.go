@@ -20,7 +20,7 @@ func NewActiveDirectoryHandler(activeDirectoryService *active_directory.ActiveDi
 	}
 }
 
-func (h *ActiveDirectoryHandler) AddDomain(c *gin.Context) {
+func (h *ActiveDirectoryHandler) AddActiveDirectoryDomain(c *gin.Context) {
 	var request requests.AddDomainRequest
 
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -60,7 +60,7 @@ func (h *ActiveDirectoryHandler) AddDomain(c *gin.Context) {
 	})
 }
 
-func (h *ActiveDirectoryHandler) GetDomains(c *gin.Context) {
+func (h *ActiveDirectoryHandler) GetActiveDirectoryDomains(c *gin.Context) {
 	uid := c.Param("adUID")
 	if uid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -88,7 +88,7 @@ func (h *ActiveDirectoryHandler) GetDomains(c *gin.Context) {
 	c.JSON(http.StatusOK, domains)
 }
 
-func (h *ActiveDirectoryHandler) Get(c *gin.Context) {
+func (h *ActiveDirectoryHandler) GetProjectActiveDirectory(c *gin.Context) {
 	uid := c.Param("adUID")
 	if uid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -113,7 +113,7 @@ func (h *ActiveDirectoryHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, project)
 }
 
-func (h *ActiveDirectoryHandler) UpdateActiveDirectory(c *gin.Context) {
+func (h *ActiveDirectoryHandler) UpdateProjectActiveDirectory(c *gin.Context) {
 	//project := restcontext.Project(c)
 	uid := c.Param("adUID")
 	var fieldsToUpdate map[string]interface{}

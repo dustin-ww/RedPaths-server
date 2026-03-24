@@ -27,7 +27,7 @@ CREATE TABLE redpaths_changes (
                          entity_uid TEXT NOT NULL,
                          changes JSONB NOT NULL,
                          changed_at TIMESTAMPTZ NOT NULL,
-
+                         change_type TEXT NOT NULL,
                          changed_by TEXT,
                          change_reason TEXT
 );

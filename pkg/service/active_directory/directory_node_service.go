@@ -3,8 +3,8 @@ package active_directory
 import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
-	"RedPaths-server/internal/repository/dgraphutil"
-	"RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/repository/redpaths/engine"
+	"RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/internal/utils"
 	rpad "RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/active_directory/gpo"
@@ -12,6 +12,8 @@ import (
 	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
+	engine3 "RedPaths-server/pkg/service/catalog"
+	engine4 "RedPaths-server/pkg/service/upsert"
 	"context"
 	"fmt"
 	"log"
@@ -26,8 +28,9 @@ type DirectoryNodeService struct {
 	userRepo            active_directory.UserRepository
 	activeDirectoryRepo active_directory.ActiveDirectoryRepository
 	directoryNodeRepo   active_directory.DirectoryNodeRepository
-	assertionRepo       redpaths.AssertionRepository
+	assertionRepo       engine.AssertionRepository
 	aclRepo             active_directory.ACLRepository
+	catalogService      *engine3.CatalogService
 	db                  *dgo.Dgraph
 }
 
@@ -37,7 +40,8 @@ func NewDirectoryNodeService(dgraphCon *dgo.Dgraph) (*DirectoryNodeService, erro
 	activeDirectoryRepo := active_directory.NewDgraphActiveDirectoryRepository(dgraphCon)
 	userRepo := active_directory.NewDgraphUserRepository(dgraphCon)
 	directoryNodeRepo := active_directory.NewDgraphDirectoryNodeRepository(dgraphCon)
-	assertionRepo := redpaths.NewDgraphAssertionRepository(dgraphCon)
+	assertionRepo := engine.NewDgraphAssertionRepository(dgraphCon)
+	catalogService := engine3.NewCatalogService(dgraphCon)
 
 	return &DirectoryNodeService{
 		db:                  dgraphCon,
@@ -47,6 +51,7 @@ func NewDirectoryNodeService(dgraphCon *dgo.Dgraph) (*DirectoryNodeService, erro
 		userRepo:            userRepo,
 		directoryNodeRepo:   directoryNodeRepo,
 		assertionRepo:       assertionRepo,
+		catalogService:      catalogService,
 	}, nil
 }
 
@@ -128,7 +133,7 @@ func (s *DirectoryNodeService) AddSecurityPrincipal(
 		}
 		assertions = append(assertions, createdAssertion)
 
-		// Build result (identisch zu AddDirectoryNode)
+		// Build result (identisch zu AddDomainDirectoryNode)
 		result = &res.EntityResult[rpad.SecurityPrincipal]{
 			Entity:     securityPrincipal,
 			Assertions: assertions,
@@ -169,6 +174,237 @@ func (s *DirectoryNodeService) GetDirectoryNodeACL(ctx context.Context, director
 		return s.aclRepo.GetByDirectoryNodeUID(ctx, tx, directoryNodeUID)
 	})
 }
+
+// -----------------------------------------------------------------------------
+// UpsertDirectoryNode
+// -----------------------------------------------------------------------------
+
+func (s *DirectoryNodeService) UpsertDirectoryNode(
+	ctx context.Context,
+	input engine4.Input[*rpad.DirectoryNode],
+) (*res.EntityResult[*rpad.DirectoryNode], error) {
+
+	subjectUID, subjectType, hasParent := input.Resolved()
+
+	var result *res.EntityResult[*rpad.DirectoryNode]
+
+	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
+		// --- Existence Check ---
+		existence, err := s.directoryNodeRepo.FindExisting(ctx, tx, input.ProjectUID, input.Entity)
+		if err != nil {
+			return fmt.Errorf("existence check failed: %w", err)
+		}
+
+		filters := active_directory.BuildDirectoryNodeFilter(input.Entity)
+		var actualNode *rpad.DirectoryNode
+
+		switch existence.FoundVia {
+
+		// --- Case 1: Not found → create new ---
+		case dgraph.ExistenceSourceNotFound:
+			createdNode, err := s.directoryNodeRepo.Create(ctx, tx, input.Entity, input.Actor)
+			if err != nil {
+				return fmt.Errorf("creating directory node: %w", err)
+			}
+			actualNode = createdNode
+			log.Printf("[UpsertDirectoryNode] Created uid=%s dn=%s", actualNode.UID, actualNode.DistinguishedName)
+
+		case dgraph.ExistenceSourceHierarchy,
+			dgraph.ExistenceSourceProject:
+
+			best := dgraph.BestCandidate(existence.Entities, filters, 0.5)
+
+			if best == nil {
+				// Candidates found but score too low → create new
+				createdNode, err := s.directoryNodeRepo.Create(ctx, tx, input.Entity, input.Actor)
+				if err != nil {
+					return fmt.Errorf("creating directory node (low score): %w", err)
+				}
+				actualNode = createdNode
+				log.Printf("[UpsertDirectoryNode] Low score, created uid=%s", actualNode.UID)
+
+			} else if best.Score >= 0.8 {
+				// --- Case 2: High Confidence → Merge ---
+				mergeFields := buildDirectoryNodeMergeFields(
+					best.Result.Entity,
+					input.Entity,
+					input.AssertionCtx.GetConfidence(),
+				)
+				updated, err := s.directoryNodeRepo.Update(
+					ctx, tx,
+					best.Result.Entity.UID,
+					input.Actor,
+					mergeFields,
+				)
+				if err != nil {
+					return fmt.Errorf("merging directory node: %w", err)
+				}
+				actualNode = updated
+				log.Printf("[UpsertDirectoryNode] Merged uid=%s score=%.2f",
+					actualNode.UID, best.Score)
+
+			} else {
+				// --- Case 3: Medium Confidence (0.5–0.8) → Possible Duplicate ---
+				log.Printf("[UpsertDirectoryNode] Possible duplicate uid=%s score=%.2f",
+					best.Result.Entity.UID, best.Score)
+
+				duplicateAssertion := &core.Assertion{
+					Predicate:  core.PredicatePossibleDuplicate,
+					Method:     core.MethodInferred,
+					Source:     input.Actor,
+					Confidence: best.Score,
+					Status:     core.StatusTentative,
+					Timestamp:  time.Now(),
+					Note: fmt.Sprintf(
+						"Possible duplicate detected with score %.2f — manual review required",
+						best.Score,
+					),
+					HasDiscoveredParent: false,
+					MarkedAsHighValue:   false,
+					Subject:             &utils2.UIDRef{UID: best.Result.Entity.UID, Type: "DirectoryNode"},
+					Object:              &utils2.UIDRef{UID: input.Entity.UID, Type: "DirectoryNode"},
+				}
+
+				if _, err := s.assertionRepo.Create(ctx, tx, duplicateAssertion); err != nil {
+					return fmt.Errorf("creating duplicate assertion: %w", err)
+				}
+
+				result = best.Result
+				return nil
+			}
+
+		default:
+			return fmt.Errorf("unhandled existence state: %s", existence.FoundVia)
+		}
+
+		// --- Create assertion ---
+		assertionSchema := &core.Assertion{
+			Predicate:           core.PredicateContains,
+			Method:              core.MethodDirectAdd,
+			Source:              input.Actor,
+			Confidence:          input.AssertionCtx.GetConfidence(),
+			Status:              core.StatusValidated,
+			Timestamp:           time.Now(),
+			HasDiscoveredParent: hasParent,
+			MarkedAsHighValue:   input.AssertionCtx.IsHighValue(),
+			Subject:             &utils2.UIDRef{UID: subjectUID, Type: subjectType},
+			Object:              &utils2.UIDRef{UID: actualNode.UID, Type: "DirectoryNode"},
+		}
+
+		createdAssertion, err := s.assertionRepo.Create(ctx, tx, assertionSchema)
+		if err != nil {
+			return fmt.Errorf("creating assertion: %w", err)
+		}
+
+		result = &res.EntityResult[*rpad.DirectoryNode]{
+			Entity:     actualNode,
+			Assertions: []*core.Assertion{createdAssertion},
+			Metadata: &res.ResultMetadata{
+				Source:         input.Actor,
+				ScanTimestamp:  time.Now(),
+				EntityCount:    1,
+				AssertionCount: 1,
+			},
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("UpsertDirectoryNode failed: %w", err)
+	}
+
+	// --- Catalog Integration (outside the transaction) ---
+	if result == nil || len(result.Assertions) == 0 {
+		return result, nil
+	}
+
+	_, catalogErr := engine3.AddToCatalog(
+		ctx,
+		s.catalogService,
+		input.ProjectUID,
+		result.Entity.UID,
+		"DirectoryNode",
+		result.Assertions[0],
+		input.Actor,
+	)
+	if catalogErr != nil {
+		log.Printf("[UpsertDirectoryNode] Warning: failed to add directory node %s to catalog: %v",
+			result.Entity.UID, catalogErr)
+	}
+
+	if hasParent {
+		promoteErr := engine3.PromoteInCatalog(
+			ctx,
+			s.catalogService,
+			input.ProjectUID,
+			result.Entity.UID,
+			"DirectoryNode",
+			core.PredicateContains,
+			input.Actor,
+		)
+		if promoteErr != nil {
+			log.Printf("[UpsertDirectoryNode] Warning: failed to promote directory node %s in catalog: %v",
+				result.Entity.UID, promoteErr)
+		}
+	}
+
+	return result, nil
+}
+
+// -----------------------------------------------------------------------------
+// buildDirectoryNodeMergeFields
+// -----------------------------------------------------------------------------
+
+func buildDirectoryNodeMergeFields(
+	existing *rpad.DirectoryNode,
+	incoming *rpad.DirectoryNode,
+	incomingConfidence float64,
+) map[string]interface{} {
+	fields := map[string]interface{}{
+		"last_seen_at": time.Now(),
+	}
+
+	// Name: overwrite if incoming set and existing empty
+	if incoming.Name != "" && existing.Name == "" {
+		fields["directory_node.name"] = incoming.Name
+	}
+
+	// Description: overwrite if incoming set and existing empty
+	if incoming.Description != "" && existing.Description == "" {
+		fields["directory_node.description"] = incoming.Description
+	}
+
+	// Distinguished name: strong identity field — overwrite if incoming set and confidence high
+	if incoming.DistinguishedName != "" &&
+		(existing.DistinguishedName == "" || incomingConfidence >= 0.8) {
+		fields["directory_node.distinguished_name"] = incoming.DistinguishedName
+	}
+
+	// Node type: overwrite if incoming set and existing empty
+	if incoming.NodeType != "" && existing.NodeType == "" {
+		fields["directory_node.node_type"] = incoming.NodeType
+	}
+
+	// Object class: overwrite if incoming set and existing empty
+	if incoming.ObjectClass != "" && existing.ObjectClass == "" {
+		fields["directory_node.object_class"] = incoming.ObjectClass
+	}
+
+	// Flags: once true, never revert
+	if incoming.IsBuiltin && !existing.IsBuiltin {
+		fields["directory_node.is_builtin"] = true
+	}
+	if incoming.IsProtected && !existing.IsProtected {
+		fields["directory_node.is_protected"] = true
+	}
+
+	return fields
+}
+
+// -----------------------------------------------------------------------------
+// UpdateDirectoryNode
+// -----------------------------------------------------------------------------
 
 func (s *DirectoryNodeService) UpdateDirectoryNode(ctx context.Context, uid, actor string, fields map[string]interface{}) (*rpad.DirectoryNode, error) {
 	if uid == "" {
@@ -279,7 +515,7 @@ func (s *DirectoryNodeService) GetAllDirectoryNodesInDomain(
 
 	// 1. Erste Ebene: Domain --contains--> DirectoryNodes
 	rootNodes, err := db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
-		return dgraphutil.GetEntitiesWithAssertions[*rpad.DirectoryNode](
+		return dgraph.GetEntitiesWithAssertions[*rpad.DirectoryNode](
 			ctx, tx, domainUID,
 			core.PredicateContains,
 			"DirectoryNode",
@@ -326,7 +562,7 @@ func (s *DirectoryNodeService) GetAllChildDirectoryNodes(
 			"last_seen_by",
 		}
 
-		return dgraphutil.GetEntitiesWithAssertions[*rpad.DirectoryNode](
+		return dgraph.GetEntitiesWithAssertions[*rpad.DirectoryNode](
 			ctx,
 			tx,
 			parentUID,

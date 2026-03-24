@@ -26,7 +26,7 @@ func SSEHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get parameters
+	// GetProjectActiveDirectory parameters
 	query := r.URL.Query()
 	runID := query.Get("runId")
 	minLevelStr := query.Get("level")
@@ -46,7 +46,7 @@ func SSEHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get or create logger
+	// GetProjectActiveDirectory or create logger
 	logger := GetLogger(runID, "", ssePostgresCon)
 	if logger == nil {
 		sendErrorResponse(w, "Failed to create logger", http.StatusInternalServerError, "")
@@ -113,7 +113,7 @@ func TriggerEventHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get parameters
+	// GetProjectActiveDirectory parameters
 	query := r.URL.Query()
 	eventType := query.Get("type")
 	message := query.Get("msg")
@@ -223,7 +223,7 @@ func LogsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get parameters
+	// GetProjectActiveDirectory parameters
 	query := r.URL.Query()
 	runID := query.Get("runId")
 
@@ -241,8 +241,8 @@ func LogsHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse pagination parameters
 	limitStr := query.Get("limit")
 	offsetStr := query.Get("offset")
-	/*sinceStr := query.Get("since")
-	untilStr := query.Get("until")*/
+	/*sinceStr := query.GetProjectActiveDirectory("since")
+	untilStr := query.GetProjectActiveDirectory("until")*/
 
 	// Default pagination values
 	limit := 100

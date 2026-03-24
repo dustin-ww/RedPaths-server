@@ -1,8 +1,9 @@
 package active_directory
 
 import (
-	"RedPaths-server/internal/repository/dgraphutil"
+	"RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model/active_directory"
+	"RedPaths-server/pkg/model/core"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,7 @@ type UserRepository interface {
 
 	UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*active_directory.User, error)
 	GetByProjectIncludingDomains(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*active_directory.User, error)
+	FindExisting(ctx context.Context, tx *dgo.Txn, projectUID string, user *active_directory.User) (*dgraph.ExistenceResult[*active_directory.User], error)
 }
 
 type DraphUserRepository struct {
@@ -43,12 +45,12 @@ func NewDgraphUserRepository(db *dgo.Dgraph) *DraphUserRepository {
 }
 
 func (r *DraphUserRepository) UserExistsByName(ctx context.Context, tx *dgo.Txn, projectUID string, name string) (bool, error) {
-	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "User", "Name", name)
+	return dgraph.ExistsByFieldInProject(ctx, tx, projectUID, "User", "Name", name)
 }
 
 func (r *DraphUserRepository) Create(ctx context.Context, tx *dgo.Txn, incomingUser *active_directory.User, actor string) (*active_directory.User, error) {
 
-	createdUser, err := dgraphutil.CreateEntity(ctx, tx, "User", incomingUser)
+	createdUser, err := dgraph.CreateEntity(ctx, tx, "User", incomingUser)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +64,7 @@ func (r *DraphUserRepository) GetByDomainUID(ctx context.Context, tx *dgo.Txn, d
 		"dgraph.type",
 	}
 
-	users, err := dgraphutil.GetEntitiesByRelation[*active_directory.User](
+	users, err := dgraph.GetEntitiesByRelation[*active_directory.User](
 		ctx,
 		tx,
 		"User",
@@ -87,7 +89,7 @@ func (r *DraphUserRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, 
 		"dgraph.type",
 	}
 
-	users, err := dgraphutil.GetEntitiesByRelation[*active_directory.User](
+	users, err := dgraph.GetEntitiesByRelation[*active_directory.User](
 		ctx,
 		tx,
 		"User",
@@ -248,5 +250,59 @@ func (r *DraphUserRepository) GetByProjectIncludingDomains(
 }
 
 func (r *DraphUserRepository) UpdateUser(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*active_directory.User, error) {
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+	return dgraph.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+}
+
+var userHierarchyHops = []dgraph.HopConfig{
+	{Predicate: core.PredicateHasActiveDirectory},
+	{Predicate: core.PredicateHasDomain, ObjectType: "Domain"},
+	{Predicate: core.PredicateContains, ObjectType: "DirectoryNode"},
+	{Predicate: core.PredicateContains, ObjectType: "User"},
+}
+
+var userFields = []string{
+	"uid",
+	"security_principal.name",
+	"security_principal.sid",
+	"user.sam_account_name",
+	"user.upn",
+	"user.is_disabled",
+	"user.is_locked",
+	"user.kerberoastable",
+	"user.asrep_roastable",
+	"user.is_domain_admin",
+	"user.is_local_admin",
+	"dgraph.type",
+}
+
+func BuildUserFilter(user *active_directory.User) []dgraph.UniqueFieldFilter {
+	return []dgraph.UniqueFieldFilter{
+		{Field: "security_principal.sid", Value: user.SID},
+		{Field: "user.upn", Value: user.UPN},
+		{Field: "user.sam_account_name", Value: user.SAMAccountName},
+	}
+}
+
+// FindExisting performs a two-phase existence check for a User.
+//
+// Phase 1: Searches via the full AD hierarchy (Project → AD → Domain → DirectoryNode → User).
+// Phase 2: Falls back to direct project-level search for orphaned users.
+func (r *DraphUserRepository) FindExisting(
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectUID string,
+	user *active_directory.User,
+) (*dgraph.ExistenceResult[*active_directory.User], error) {
+
+	filters := BuildUserFilter(user)
+
+	return dgraph.CheckEntityExists[*active_directory.User](
+		ctx, tx,
+		projectUID,
+		"User",
+		filters,
+		dgraph.FilterModeOR,
+		userFields,
+		userHierarchyHops,
+	)
 }

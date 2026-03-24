@@ -1,8 +1,10 @@
 package active_directory
 
 import (
-	"RedPaths-server/internal/repository/dgraphutil"
+	dgraphutil2 "RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model"
+	"RedPaths-server/pkg/model/active_directory"
+	"RedPaths-server/pkg/model/core/res"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,6 +32,8 @@ type ProjectRepository interface {
 	AddTarget(ctx context.Context, tx *dgo.Txn, projectUID, targetUID string) error
 	AddHostWithUnknownDomain(ctx context.Context, tx *dgo.Txn, projectUID, hostUID string) error
 	AddUser(ctx context.Context, tx *dgo.Txn, projectUID, userUID string) error
+
+	GetAllDomainsFromCatalog(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*active_directory.Domain], error)
 }
 
 // DgraphProjectRepository implements ProjectRepository using Dgraph
@@ -42,9 +46,32 @@ func NewDgraphProjectRepository(db *dgo.Dgraph) *DgraphProjectRepository {
 	return &DgraphProjectRepository{DB: db}
 }
 
+func (r *DgraphProjectRepository) GetAllDomainsFromCatalog(
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectUID string,
+) ([]*res.EntityResult[*active_directory.Domain], error) {
+	domainFields := []string{
+		"uid",
+		"domain.name",
+		"domain.dns_name",
+		"domain.netbios_name",
+		"domain.domain_sid",
+		"domain.domain_guid",
+		"domain.domain_functional_level",
+		"domain.forest_functional_level",
+		"created_at",
+		"modified_at",
+		"dgraph.type",
+	}
+	return dgraphutil2.GetCatalogEntitiesAllPredicates[*active_directory.Domain](
+		ctx, tx, projectUID, "Domain", domainFields,
+	)
+}
+
 func (r *DgraphProjectRepository) AddActiveDirectory(ctx context.Context, tx *dgo.Txn, projectUID, activeDirectoryUID string) error {
 	relationName := "has_ad"
-	err := dgraphutil.AddRelation(ctx, tx, projectUID, activeDirectoryUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, projectUID, activeDirectoryUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking active directory forest %s to project %s with relation %s", activeDirectoryUID, projectUID, relationName)
 	}
@@ -53,7 +80,7 @@ func (r *DgraphProjectRepository) AddActiveDirectory(ctx context.Context, tx *dg
 
 func (r *DgraphProjectRepository) AddAssertion(ctx context.Context, tx *dgo.Txn, projectUID, assertionUID string) error {
 	relationName := "has_assertion"
-	err := dgraphutil.AddRelation(ctx, tx, projectUID, assertionUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, projectUID, assertionUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking red paths assertion %s to project %s with relation %s", assertionUID, projectUID, relationName)
 	}
@@ -62,29 +89,30 @@ func (r *DgraphProjectRepository) AddAssertion(ctx context.Context, tx *dgo.Txn,
 
 // Create adds a new project to the database
 func (r *DgraphProjectRepository) Create(ctx context.Context, tx *dgo.Txn, incomingProject *model.Project) (*model.Project, error) {
-	return dgraphutil.CreateEntity(ctx, tx, "Project", incomingProject)
+	dgraphutil2.InitCreateMetadata(&incomingProject.RedPathsMetadata, "user")
+	return dgraphutil2.CreateEntity(ctx, tx, "Project", incomingProject)
 }
 
 // Get retrieves a project by UID
 func (r *DgraphProjectRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Project, error) {
 	query := `
-        query Project($uid: string) {
-            project(func: uid($uid)) {
-                uid
-                project.name
-                project.tags
-                project.created_at
-                project.modified_at
-                project.description
-                has_target {
-                    uid
-                    target.ip_range
-                    target.name
-                }
-            }
-        }
-    `
-	return dgraphutil.GetEntityByUID[model.Project](ctx, tx, uid, "project", query)
+		query Project($uid: string) {
+			project(func: uid($uid)) {
+				uid
+				project.name
+				project.tags
+				created_at
+				modified_at
+				project.description
+				has_target {
+					uid
+					target.ip_range
+					target.name
+				}
+			}
+		}
+	`
+	return dgraphutil2.GetEntityByUID[model.Project](ctx, tx, uid, "project", query)
 }
 
 // GetTargets retrieves all targets for a project
@@ -140,18 +168,19 @@ func (r *DgraphProjectRepository) GetAll(ctx context.Context, tx *dgo.Txn) ([]*m
 	fields := []string{
 		"uid",
 		"project.name",
-		"project.created_at",
+		"created_at",
+		"modified_at",
 		"project.description",
 		"dgraph.type",
 	}
-	return dgraphutil.GetAllEntities[*model.Project](ctx, tx, "Project", fields, 0, 0)
+	return dgraphutil2.GetAllEntities[*model.Project](ctx, tx, "Project", fields, 0, 0)
 }
 
 // UpdateProject updates specified fields on a project
 func (r *DgraphProjectRepository) UpdateProject(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Project, error) {
 	// legacy
 	fields["updated_at"] = time.Now().Format(time.RFC3339)
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }
 
 // Delete removes a project by UID
@@ -180,13 +209,13 @@ func (r *DgraphProjectRepository) Delete(ctx context.Context, tx *dgo.Txn, uid s
 		"Trust":          {},
 	}
 
-	return dgraphutil.DeleteEntityCascadeByTypeMap(ctx, tx, uid, projectMap)
+	return dgraphutil2.DeleteEntityCascadeByTypeMap(ctx, tx, uid, projectMap)
 }
 
 // AddTarget connects a target to a project
 func (r *DgraphProjectRepository) AddTarget(ctx context.Context, tx *dgo.Txn, projectUID, targetUID string) error {
 	relationName := "has_target"
-	err := dgraphutil.AddRelation(ctx, tx, projectUID, targetUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, projectUID, targetUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking target %s to project %s with relation %s", targetUID, projectUID, relationName)
 	}
@@ -195,7 +224,7 @@ func (r *DgraphProjectRepository) AddTarget(ctx context.Context, tx *dgo.Txn, pr
 
 func (r *DgraphProjectRepository) AddHostWithUnknownDomain(ctx context.Context, tx *dgo.Txn, projectUID, hostUID string) error {
 	relationName := "has_host"
-	err := dgraphutil.AddRelation(ctx, tx, projectUID, hostUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, projectUID, hostUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking unknown domain host %s to project %s with relation %s", hostUID, projectUID, relationName)
 	}
@@ -205,7 +234,7 @@ func (r *DgraphProjectRepository) AddHostWithUnknownDomain(ctx context.Context, 
 
 func (r *DgraphProjectRepository) AddUser(ctx context.Context, tx *dgo.Txn, projectUID, userUID string) error {
 	relationName := "has_user"
-	err := dgraphutil.AddRelation(ctx, tx, projectUID, userUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, projectUID, userUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking unknown domain user %s to project %s with relation %s", userUID, projectUID, relationName)
 	}

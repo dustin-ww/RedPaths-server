@@ -2,7 +2,7 @@ package redpaths
 
 import (
 	"RedPaths-server/internal/db"
-	rprepo "RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/repository/redpaths/modules"
 	"RedPaths-server/pkg/model/redpaths"
 	"context"
 	"log"
@@ -12,16 +12,16 @@ import (
 
 type CollectionService struct {
 	db                     *gorm.DB
-	redPathsModuleRepo     rprepo.RedPathsModuleRepository
-	redPathsCollectionRepo rprepo.RedPathsCollectionRepository
+	redPathsModuleRepo     modules.RedPathsModuleRepository
+	redPathsCollectionRepo modules.RedPathsCollectionRepository
 }
 
 func NewCollectionService(postgresCon *gorm.DB) (*CollectionService, error) {
 
 	return &CollectionService{
 		db:                     postgresCon,
-		redPathsModuleRepo:     rprepo.NewPostgresRedPathsModuleRepository(),
-		redPathsCollectionRepo: rprepo.NewPostgresRedPathsCollectionRepository(),
+		redPathsModuleRepo:     modules.NewPostgresRedPathsModuleRepository(),
+		redPathsCollectionRepo: modules.NewPostgresRedPathsCollectionRepository(),
 	}, nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"RedPaths-server/pkg/module_exec"
 	"RedPaths-server/pkg/service"
 	"RedPaths-server/pkg/service/active_directory"
+	"RedPaths-server/pkg/service/change"
+	"RedPaths-server/pkg/service/engine"
 	"RedPaths-server/pkg/service/redpaths"
 	"fmt"
 	"io"
@@ -49,19 +51,21 @@ func StartServer(port string, postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) {
 
 	projectService, err := active_directory.NewProjectService(dgraphCon, postgresCon)
 	domainService, err := active_directory.NewDomainService(dgraphCon)
-	hostService, err := active_directory.NewHostService(dgraphCon)
+	hostService, err := active_directory.NewHostService(dgraphCon, postgresCon)
 	serviceService, err := active_directory.NewServiceService(dgraphCon)
 	userService, err := active_directory.NewUserService(dgraphCon)
 	dirNodeService, err := active_directory.NewDirectoryNodeService(dgraphCon)
 	activeDirectoryService, err := active_directory.NewActiveDirectoryService(dgraphCon)
 	gpoService, err := active_directory.NewGPOService(dgraphCon)
+	capabilityService, err := engine.NewCapabilityService(dgraphCon, postgresCon)
 	moduleExecutor := module_exec.GlobalRegistry
 	redPathsModuleService, err := redpaths.NewModuleService(moduleExecutor, moduleExecutor.RecommendationEngine, postgresCon)
 	logService, err := service.NewLogService(postgresCon)
+	changeService, err := change.NewChangeService(postgresCon)
 	if err != nil {
 		log.Fatalf("Failed to initialize ProjectService: %v", err)
 	}
-	RegisterProjectHandlers(router, projectService, logService, domainService, hostService, serviceService, userService, dirNodeService, activeDirectoryService, gpoService)
+	RegisterProjectHandlers(router, projectService, logService, domainService, hostService, serviceService, userService, dirNodeService, activeDirectoryService, gpoService, capabilityService, changeService)
 	RegisterRedPathsModuleHandlers(router, redPathsModuleService, projectService)
 	RegisterServerHandlers(router)
 	logger.Info("Starting server")

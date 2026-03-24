@@ -3,7 +3,7 @@ package active_directory
 import (
 	"RedPaths-server/internal/db"
 	"RedPaths-server/internal/repository/active_directory"
-	"RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/repository/redpaths/engine"
 	"RedPaths-server/pkg/model/active_directory/priv"
 	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/core/res"
@@ -21,7 +21,7 @@ type ACLService struct {
 	hostRepo            active_directory.HostRepository
 	activeDirectoryRepo active_directory.ActiveDirectoryRepository
 	aclRepo             active_directory.ACLRepository
-	assertionRepo       redpaths.AssertionRepository
+	assertionRepo       engine.AssertionRepository
 	db                  *dgo.Dgraph
 }
 
@@ -30,7 +30,7 @@ func NewACLService(dgraphCon *dgo.Dgraph) (*ACLService, error) {
 	hostRepo := active_directory.NewDgraphHostRepository(dgraphCon)
 	activeDirectoryRepo := active_directory.NewDgraphActiveDirectoryRepository(dgraphCon)
 	aclRepo := active_directory.NewDgraphDgraphACLRepository(dgraphCon)
-	assertionRepo := redpaths.NewDgraphAssertionRepository(dgraphCon)
+	assertionRepo := engine.NewDgraphAssertionRepository(dgraphCon)
 
 	return &ACLService{
 		db:                  dgraphCon,
@@ -70,7 +70,7 @@ func (s *ACLService) AddACE(
 		/*		if existingDomain != nil {
 				// Domain exists - reuse
 				domain = existingDomain
-				log.Printf("[AddDomain] Reusing existing domain uid=%s", domain.UID)
+				log.Printf("[AddActiveDirectoryDomain] Reusing existing domain uid=%s", domain.UID)
 			} else {*/
 		// Create new Domain
 		ace, err := s.aclRepo.CreateACE(ctx, tx, incomingACE, actor)
@@ -158,7 +158,7 @@ func (s *ACLService) AddADRight(
 		/*		if existingDomain != nil {
 				// Domain exists - reuse
 				domain = existingDomain
-				log.Printf("[AddDomain] Reusing existing domain uid=%s", domain.UID)
+				log.Printf("[AddActiveDirectoryDomain] Reusing existing domain uid=%s", domain.UID)
 			} else {*/
 		// Create new Domain
 		adRight, err := s.aclRepo.CreateADRight(ctx, tx, incomingADRight, actor)
@@ -213,7 +213,7 @@ func (s *ACLService) GetAllACE(ctx context.Context, aclUID string) ([]*res.Entit
 	})
 }
 
-/*func (s *ACLService) UpdateActiveDirectory(ctx context.Context, uid, actor string, fields map[string]interface{}) (*rpap.ActiveDirectory, error) {
+/*func (s *ACLService) UpdateProjectActiveDirectory(ctx context.Context, uid, actor string, fields map[string]interface{}) (*rpap.ActiveDirectory, error) {
 if uid == "" {
 	return nil, utils.ErrUIDRequired
 }

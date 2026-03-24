@@ -2,8 +2,8 @@ package redpaths
 
 import (
 	"RedPaths-server/internal/db"
-	"RedPaths-server/internal/recom"
-	rp "RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/recommendation"
+	"RedPaths-server/internal/repository/redpaths/modules"
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/redpaths"
 	"RedPaths-server/pkg/model/redpaths/input"
@@ -16,24 +16,24 @@ import (
 
 type ModuleService struct {
 	db                 *gorm.DB
-	redPathsModuleRepo rp.RedPathsModuleRepository
-	redPathsVectorRepo rp.RedPathsVectorRepository
+	redPathsModuleRepo modules.RedPathsModuleRepository
+	redPathsVectorRepo modules.RedPathsVectorRepository
 	attackRunner       interfaces.ModuleExecutor // Add this back
-	recommender        *recom.Engine
+	recommender        *recommendation.Engine
 }
 
-func NewModuleService(attackRunner interfaces.ModuleExecutor, recommender *recom.Engine, postgresCon *gorm.DB) (*ModuleService, error) {
+func NewModuleService(attackRunner interfaces.ModuleExecutor, recommender *recommendation.Engine, postgresCon *gorm.DB) (*ModuleService, error) {
 
 	return &ModuleService{
 		db:                 postgresCon,
-		redPathsModuleRepo: rp.NewPostgresRedPathsModuleRepository(),
-		redPathsVectorRepo: rp.NewPostgresRedPathsVectorRepository(),
+		redPathsModuleRepo: modules.NewPostgresRedPathsModuleRepository(),
+		redPathsVectorRepo: modules.NewPostgresRedPathsVectorRepository(),
 		attackRunner:       attackRunner, // Store the executor
 		recommender:        recommender,
 	}, nil
 }
 
-func (s *ModuleService) GetInheritanceSubgraph(ctx context.Context, moduleKey string, direction rp.GraphDirection, maxDepth *int) (*redpaths.InheritanceGraph, error) {
+func (s *ModuleService) GetInheritanceSubgraph(ctx context.Context, moduleKey string, direction modules.GraphDirection, maxDepth *int) (*redpaths.InheritanceGraph, error) {
 	return db.ExecutePostgresRead(ctx, s.db, func(tx *gorm.DB) (*redpaths.InheritanceGraph, error) {
 		return s.redPathsModuleRepo.GetInheritanceSubgraph(ctx, tx, moduleKey, direction, maxDepth)
 	})

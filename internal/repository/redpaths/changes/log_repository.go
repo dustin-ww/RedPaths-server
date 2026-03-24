@@ -1,4 +1,4 @@
-package redpaths
+package changes
 
 import (
 	"RedPaths-server/pkg/model/redpaths"

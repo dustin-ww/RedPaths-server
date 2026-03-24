@@ -1,4 +1,4 @@
-package dgraphutil
+package dgraph
 
 import (
 	"RedPaths-server/pkg/model/active_directory/gpo"

@@ -1,4 +1,4 @@
-package recom
+package recommendation
 
 import (
 	"RedPaths-server/pkg/interfaces"

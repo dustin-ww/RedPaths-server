@@ -2,7 +2,7 @@ package service
 
 import (
 	"RedPaths-server/internal/db"
-	rprepo "RedPaths-server/internal/repository/redpaths"
+	rprepo "RedPaths-server/internal/repository/redpaths/changes"
 	"RedPaths-server/pkg/model/redpaths"
 	"RedPaths-server/pkg/model/utils/pagination"
 	"RedPaths-server/pkg/model/utils/query"

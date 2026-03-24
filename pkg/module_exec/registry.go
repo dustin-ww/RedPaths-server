@@ -2,7 +2,7 @@ package module_exec
 
 import (
 	"RedPaths-server/internal/config"
-	"RedPaths-server/internal/recom"
+	"RedPaths-server/internal/recommendation"
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/redpaths"
 	"RedPaths-server/pkg/model/rpsdk"
@@ -24,7 +24,7 @@ type Registry struct {
 	initialized          bool
 	pendingModules       map[string]*pendingModuleInfo
 	mu                   sync.RWMutex // Race Condition Protection
-	RecommendationEngine *recom.Engine
+	RecommendationEngine *recommendation.Engine
 }
 
 type pendingModuleInfo struct {
@@ -48,7 +48,7 @@ func InitializeRegistry(postgresCon *gorm.DB, dgraphCon *dgo.Dgraph) error {
 		return nil
 	}
 
-	recomEngine := recom.NewEngine(postgresCon)
+	recomEngine := recommendation.NewEngine(postgresCon)
 	moduleService, err := redpaths2.NewModuleService(GlobalRegistry, recomEngine, postgresCon)
 	if err != nil {
 		return fmt.Errorf("failed to create module service: %w", err)

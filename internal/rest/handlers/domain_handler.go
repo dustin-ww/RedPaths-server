@@ -31,7 +31,7 @@ func NewDomainHandler(projectService *active_directory.ProjectService, directory
 }
 
 /*
-func (h *DomainHandler) GetHosts(c *gin.Context) {
+func (h *DomainHandler) GetCatalogHosts(c *gin.Context) {
 	uid := c.Param("domainUID")
 	if uid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -57,7 +57,7 @@ func (h *DomainHandler) GetHosts(c *gin.Context) {
 	c.JSON(http.StatusOK, hosts)
 }*/
 
-func (h *DomainHandler) GetHosts(c *gin.Context) {
+func (h *DomainHandler) GetDomainHosts(c *gin.Context) {
 	//domain := restcontext.Domain(c)
 	domainUID := c.Param("domainUID")
 
@@ -73,7 +73,7 @@ func (h *DomainHandler) GetHosts(c *gin.Context) {
 	c.JSON(http.StatusOK, hosts)
 }
 
-func (h *DomainHandler) GetGPOs(c *gin.Context) {
+func (h *DomainHandler) GetDomainGPOs(c *gin.Context) {
 	//domain := restcontext.Domain(c)
 	domainUID := c.Param("domainUID")
 
@@ -88,7 +88,7 @@ func (h *DomainHandler) GetGPOs(c *gin.Context) {
 	c.JSON(http.StatusOK, gpos)
 }
 
-func (h *DomainHandler) GetGPOLib(c *gin.Context) {
+func (h *DomainHandler) GetDomainGPOLib(c *gin.Context) {
 	//domain := restcontext.Domain(c)
 	domainUID := c.Param("domainUID")
 
@@ -103,7 +103,7 @@ func (h *DomainHandler) GetGPOLib(c *gin.Context) {
 	c.JSON(http.StatusOK, gpos)
 }
 
-func (h *DomainHandler) GetDirectoryNodes(c *gin.Context) {
+func (h *DomainHandler) GetDomainDirectoryNodes(c *gin.Context) {
 	domainUID := c.Param("domainUID")
 
 	directoryNodes, err := h.domainService.GetDomainDirectoryNodes(
@@ -182,7 +182,7 @@ func (h *DomainHandler) AddGPOLink(c *gin.Context) {
 
 }
 
-func (h *DomainHandler) AddDirectoryNode(c *gin.Context) {
+func (h *DomainHandler) AddDomainDirectoryNode(c *gin.Context) {
 
 	var request requests.AddDirectoryNodeRequest
 
@@ -224,7 +224,7 @@ func (h *DomainHandler) AddDirectoryNode(c *gin.Context) {
 
 }
 
-func (h *DomainHandler) LinkGPO(c *gin.Context) {
+func (h *DomainHandler) LinkDomainGPO(c *gin.Context) {
 	var request requests.AddGPOLinkRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -292,7 +292,7 @@ func (h *DomainHandler) UpdateDomain(c *gin.Context) {
 	})
 }
 
-func (h *DomainHandler) AddHost(c *gin.Context) {
+func (h *DomainHandler) AddDomainHost(c *gin.Context) {
 	//domain := restcontext.Domain(c)
 	domainUID := c.Param("domainUID")
 

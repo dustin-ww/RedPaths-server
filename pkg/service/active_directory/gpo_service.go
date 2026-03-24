@@ -2,7 +2,7 @@ package active_directory
 
 import (
 	"RedPaths-server/internal/repository/active_directory"
-	"RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/repository/redpaths/engine"
 	"RedPaths-server/pkg/model/active_directory/gpo"
 	"context"
 
@@ -13,7 +13,7 @@ type GPOService struct {
 	domainRepo        active_directory.DomainRepository
 	hostRepo          active_directory.HostRepository
 	directoryNodeRepo active_directory.DirectoryNodeRepository
-	assertionRepo     redpaths.AssertionRepository
+	assertionRepo     engine.AssertionRepository
 	gpoRepo           active_directory.GPORepository
 	db                *dgo.Dgraph
 }
@@ -22,7 +22,7 @@ func NewGPOService(dgraphCon *dgo.Dgraph) (*GPOService, error) {
 	domainRepo := active_directory.NewDgraphDomainRepository(dgraphCon)
 	hostRepo := active_directory.NewDgraphHostRepository(dgraphCon)
 	directoryNodeRepo := active_directory.NewDgraphDirectoryNodeRepository(dgraphCon)
-	assertionRepo := redpaths.NewDgraphAssertionRepository(dgraphCon)
+	assertionRepo := engine.NewDgraphAssertionRepository(dgraphCon)
 	gpoRepo := active_directory.NewDgraphGPORepository(dgraphCon)
 
 	return &GPOService{

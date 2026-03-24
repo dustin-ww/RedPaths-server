@@ -1,7 +1,7 @@
 package active_directory
 
 import (
-	"RedPaths-server/internal/repository/dgraphutil"
+	dgraphutil2 "RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/core/res"
@@ -21,6 +21,7 @@ type ActiveDirectoryRepository interface {
 	// With Assertions
 	GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*active_directory.ActiveDirectory], error)
 	FindByForestNameInProject(ctx context.Context, tx *dgo.Txn, projectUID, adForestName string) (*active_directory.ActiveDirectory, error)
+	FindExisting(ctx context.Context, tx *dgo.Txn, projectUID string, ad *active_directory.ActiveDirectory) (*dgraphutil2.ExistenceResult[*active_directory.ActiveDirectory], error)
 }
 
 type DgraphActiveDirectoryRepository struct {
@@ -46,7 +47,7 @@ func (r *DgraphActiveDirectoryRepository) FindByForestNameInProject(
 		"dgraph.type",
 	}
 
-	return dgraphutil.FindEntityByFieldViaAssertion[active_directory.ActiveDirectory](
+	return dgraphutil2.FindEntityByFieldViaAssertion[active_directory.ActiveDirectory](
 		ctx,
 		tx,
 		projectUID,
@@ -77,7 +78,7 @@ func (r *DgraphActiveDirectoryRepository) GetByProjectUID(
 		"dgraph.type",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertions[*active_directory.ActiveDirectory](
+	return dgraphutil2.GetEntitiesWithAssertions[*active_directory.ActiveDirectory](
 		ctx,
 		tx,
 		projectUID,
@@ -97,7 +98,7 @@ func (r *DgraphActiveDirectoryRepository) GetByProjectUID(
 		"~project.has_ad { uid }",
 	}
 
-	activeDirectoryForests, err := dgraphutil.GetEntitiesByRelation[*active_directory.ActiveDirectory](
+	activeDirectoryForests, err := dgraph.GetEntitiesByRelation[*active_directory.ActiveDirectory](
 		ctx,
 		tx,
 		"ActiveDirectory",
@@ -115,8 +116,8 @@ func (r *DgraphActiveDirectoryRepository) GetByProjectUID(
 
 // Create adds a new project to the database
 func (r *DgraphActiveDirectoryRepository) Create(ctx context.Context, tx *dgo.Txn, activeDirectory *active_directory.ActiveDirectory, actor string) (*active_directory.ActiveDirectory, error) {
-	dgraphutil.InitCreateMetadata(&activeDirectory.RedPathsMetadata, actor)
-	return dgraphutil.CreateEntity(ctx, tx, "ActiveDirectory", activeDirectory)
+	dgraphutil2.InitCreateMetadata(&activeDirectory.RedPathsMetadata, actor)
+	return dgraphutil2.CreateEntity(ctx, tx, "ActiveDirectory", activeDirectory)
 }
 
 func (r *DgraphActiveDirectoryRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*active_directory.ActiveDirectory, error) {
@@ -129,15 +130,56 @@ func (r *DgraphActiveDirectoryRepository) Get(ctx context.Context, tx *dgo.Txn, 
             }
         }
     `
-	return dgraphutil.GetEntityByUID[active_directory.ActiveDirectory](ctx, tx, uid, "activedirectory", query)
+	return dgraphutil2.GetEntityByUID[active_directory.ActiveDirectory](ctx, tx, uid, "activedirectory", query)
 }
 
 func (r *DgraphActiveDirectoryRepository) Update(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*active_directory.ActiveDirectory, error) {
 	// legacy
 	fields["updated_at"] = time.Now().Format(time.RFC3339)
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }
 
 func (r *DgraphActiveDirectoryRepository) Delete(ctx context.Context, tx *dgo.Txn, uid string) error {
 	panic("implement me")
+}
+
+var activeDirectoryHierarchyHops = []dgraphutil2.HopConfig{
+	{Predicate: core.PredicateHasActiveDirectory, ObjectType: "ActiveDirectory"},
+}
+
+var activeDirectoryFields = []string{
+	"uid",
+	"active_directory.forest_name",
+	"active_directory.forest_functional_level",
+	"dgraph.type",
+}
+
+func BuildActiveDirectoryFilter(ad *active_directory.ActiveDirectory) []dgraphutil2.UniqueFieldFilter {
+	return []dgraphutil2.UniqueFieldFilter{
+		{Field: "active_directory.forest_name", Value: ad.ForestName},
+	}
+}
+
+// FindExisting performs a two-phase existence check for an ActiveDirectory.
+//
+// Phase 1: Searches via the project hierarchy (Project → AD).
+// Phase 2: Falls back to a direct project-level search for orphaned instances.
+func (r *DgraphActiveDirectoryRepository) FindExisting(
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectUID string,
+	ad *active_directory.ActiveDirectory,
+) (*dgraphutil2.ExistenceResult[*active_directory.ActiveDirectory], error) {
+
+	filters := BuildActiveDirectoryFilter(ad)
+
+	return dgraphutil2.CheckEntityExists[*active_directory.ActiveDirectory](
+		ctx, tx,
+		projectUID,
+		"ActiveDirectory",
+		filters,
+		dgraphutil2.FilterModeOR,
+		activeDirectoryFields,
+		activeDirectoryHierarchyHops,
+	)
 }

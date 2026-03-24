@@ -1,4 +1,4 @@
-package dgraphutil
+package dgraph
 
 import (
 	"RedPaths-server/pkg/model/core"
@@ -18,8 +18,9 @@ import (
 // --- Types -------------------------------------------------------------------
 
 type HopConfig struct {
-	Predicate  core.Predicate
-	ObjectType string // only relevant for the last hop
+	Predicate    core.Predicate
+	ObjectType   string // only relevant for the last hop
+	AnyPredicate bool
 }
 
 type leafAssertion struct {
@@ -198,15 +199,20 @@ func buildNHopQuery(queryName string, hops []HopConfig, objectFields []string) s
 	fieldsStr := strings.Join(objectFields, "\n\t\t\t\t\t\t")
 
 	lastHop := hops[len(hops)-1]
+
+	// Type filter for the leaf object (e.g. @filter(type(Host)))
 	typeFilter := ""
-	if strings.TrimSpace(lastHop.ObjectType) != "" {
+	if strings.TrimSpace(string(lastHop.ObjectType)) != "" {
 		typeFilter = fmt.Sprintf("@filter(type(%s))", lastHop.ObjectType)
 	}
 
-	// Innermost block: last hop with all assertion fields.
+	// Predicate filter for the last hop assertion
+	lastPredicateFilter := buildPredicateFilter(lastHop)
+
+	// Innermost block: last hop with all assertion metadata fields.
 	// Predicates are inlined directly — DGraph does not support query variables
 	// inside nested reverse edge filters.
-	inner := fmt.Sprintf(`~assertion.subject @filter(eq(assertion.predicate, "%s")) {
+	inner := fmt.Sprintf(`~assertion.subject %s {
 					assertion_uid: uid
 					assertion.predicate
 					assertion.method
@@ -223,16 +229,19 @@ func buildNHopQuery(queryName string, hops []HopConfig, objectFields []string) s
 					object: assertion.object %s {
 						%s
 					}
-				}`, string(lastHop.Predicate), typeFilter, fieldsStr)
+				}`, lastPredicateFilter, typeFilter, fieldsStr)
 
 	// Wrap intermediate hops from inside out
 	for i := len(hops) - 2; i >= 0; i-- {
-		inner = fmt.Sprintf(`~assertion.subject @filter(eq(assertion.predicate, "%s")) {
+		hop := hops[i]
+		predicateFilter := buildPredicateFilter(hop)
+
+		inner = fmt.Sprintf(`~assertion.subject %s {
 				assertion.object {
 					uid
 					%s
 				}
-			}`, string(hops[i].Predicate), inner)
+			}`, predicateFilter, inner)
 	}
 
 	return fmt.Sprintf(`query %s($subjectUID: string) {
@@ -240,6 +249,13 @@ func buildNHopQuery(queryName string, hops []HopConfig, objectFields []string) s
 			%s
 		}
 	}`, queryName, inner)
+}
+
+func buildPredicateFilter(hop HopConfig) string {
+	if hop.AnyPredicate || strings.TrimSpace(string(hop.Predicate)) == "" {
+		return ""
+	}
+	return fmt.Sprintf(`@filter(eq(assertion.predicate, "%s"))`, string(hop.Predicate))
 }
 
 // --- Traversal ---------------------------------------------------------------
@@ -286,6 +302,151 @@ func extractAssertionMaps(node map[string]any) []map[string]any {
 	result := make([]map[string]any, 0, len(arr))
 	result = append(result, arr...)
 	return result
+}
+
+// GetEntitiesWithAssertionsByMethod filtert nur nach Method, ignoriert Predicate
+func GetEntitiesWithAssertionsByMethod[T any](
+	ctx context.Context,
+	tx *dgo.Txn,
+	subjectUID string,
+	method core.Method,
+	objectType string,
+	objectFields []string,
+	queryName string,
+) ([]*res.EntityResult[T], error) {
+	if tx == nil {
+		return nil, fmt.Errorf("transaction cannot be nil")
+	}
+	if queryName == "" {
+		queryName = "getEntitiesByMethod"
+	}
+	if len(objectFields) == 0 {
+		objectFields = []string{"uid", "dgraph.type"}
+	}
+
+	fieldsStr := strings.Join(objectFields, "\n\t\t\t\t\t\t")
+	typeFilter := ""
+	if strings.TrimSpace(objectType) != "" {
+		typeFilter = fmt.Sprintf("@filter(type(%s))", objectType)
+	}
+
+	query := fmt.Sprintf(`query %s($subjectUID: string) {
+        subject(func: uid($subjectUID)) {
+            ~assertion.subject @filter(eq(assertion.method, "%s")) {
+                assertion_uid: uid
+                assertion.predicate
+                assertion.method
+                assertion.source
+                assertion.confidence
+                assertion.status
+                assertion.timestamp
+                assertion.note
+                assertion.high_value_marked
+                assertion.has_discovered_parent
+                assertion_subject: assertion.subject {
+                    uid
+                }
+                object: assertion.object %s {
+                    %s
+                }
+            }
+        }
+    }`, queryName, string(method), typeFilter, fieldsStr)
+
+	log.Printf("[%s] Generated query:\n%s", queryName, query)
+
+	resp, err := tx.QueryWithVars(ctx, query, map[string]string{
+		"$subjectUID": subjectUID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	log.Printf("[%s] Raw response: %s", queryName, string(resp.Json))
+
+	var rawResult map[string]any
+	if err := json.Unmarshal(resp.Json, &rawResult); err != nil {
+		return nil, fmt.Errorf("unmarshal failed: %w", err)
+	}
+
+	subjects := extractArray(rawResult, "subject")
+	if len(subjects) == 0 {
+		return []*res.EntityResult[T]{}, nil
+	}
+
+	leafAssertions := traverseToLeafAssertions(subjects[0], subjectUID, 0)
+	dedupMap := make(map[string]*dedupEntry[T])
+
+	for _, leaf := range leafAssertions {
+		objectRaw, ok := leaf.data["object"]
+		if !ok {
+			continue
+		}
+
+		objectJSON, err := json.Marshal(objectRaw)
+		if err != nil {
+			continue
+		}
+
+		var entities []T
+		if err := json.Unmarshal(objectJSON, &entities); err != nil {
+			var single T
+			if err2 := json.Unmarshal(objectJSON, &single); err2 != nil {
+				continue
+			}
+			entities = []T{single}
+		}
+
+		for _, entity := range entities {
+			objectUID := extractUID(entity)
+			ts := extractTime(leaf.data, "assertion.timestamp")
+			assertionUID := extractString(leaf.data, "assertion_uid")
+
+			assertion := &core.Assertion{
+				UID:                 assertionUID,
+				Predicate:           core.Predicate(extractString(leaf.data, "assertion.predicate")),
+				Method:              core.Method(extractString(leaf.data, "assertion.method")),
+				Source:              extractString(leaf.data, "assertion.source"),
+				Confidence:          extractFloat(leaf.data, "assertion.confidence"),
+				Status:              core.Status(extractString(leaf.data, "assertion.status")),
+				Timestamp:           ts,
+				Note:                extractString(leaf.data, "assertion.note"),
+				MarkedAsHighValue:   extractBool(leaf.data, "assertion.high_value_marked"),
+				HasDiscoveredParent: extractBool(leaf.data, "assertion.has_discovered_parent"),
+				Subject:             &utils.UIDRef{UID: leaf.subjectUID},
+				Object:              &utils.UIDRef{UID: objectUID},
+			}
+
+			if entry, found := dedupMap[objectUID]; found {
+				if _, exists := entry.assertionUIDs[assertionUID]; !exists {
+					entry.assertionUIDs[assertionUID] = struct{}{}
+					entry.result.Assertions = append(entry.result.Assertions, assertion)
+					entry.result.Metadata.AssertionCount++
+				}
+			} else {
+				dedupMap[objectUID] = &dedupEntry[T]{
+					result: &res.EntityResult[T]{
+						Entity:     entity,
+						Assertions: []*core.Assertion{assertion},
+						Metadata: &res.ResultMetadata{
+							Source:         assertion.Source,
+							ScanTimestamp:  ts,
+							EntityCount:    1,
+							AssertionCount: 1,
+						},
+					},
+					assertionUIDs: map[string]struct{}{assertionUID: {}},
+				}
+			}
+		}
+	}
+
+	deduped := make([]*res.EntityResult[T], 0, len(dedupMap))
+	for _, entry := range dedupMap {
+		deduped = append(deduped, entry.result)
+	}
+
+	return deduped, nil
 }
 
 // --- 1-hop convenience wrapper -----------------------------------------------

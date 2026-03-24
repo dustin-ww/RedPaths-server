@@ -3,10 +3,15 @@ package enumeration
 import (
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/interfaces/module"
+	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/model/redpaths/input"
 	"RedPaths-server/pkg/model/rpsdk"
+	"RedPaths-server/pkg/model/utils/assertion"
 	plugin "RedPaths-server/pkg/module_exec"
+	engine4 "RedPaths-server/pkg/service/upsert"
 	"RedPaths-server/pkg/sse"
+	"context"
+	"fmt"
 )
 
 // INIT
@@ -89,6 +94,70 @@ func (n *DNSExplorer) GetMetadata() *interfaces.ModuleMetadata {
 }
 
 func (n *DNSExplorer) ExecuteModule(params *input.Parameter, logger *sse.SSELogger) error {
-	// INSERT MAIN LOGIC HERE
+	ctx := context.Background()
+	n.logger = logger
+
+	projectUID := params.ProjectUID
+
+	n.logger.Info("DNSExplorer", "Starting UpsertHost test")
+
+	// --- Test 1: Neuen Host erstellen ---
+	n.logger.Info("DNSExplorer", "Test 1: Creating new host")
+	result1, err := n.services.HostService.UpsertHost(ctx, engine4.Input[*model.Host]{
+		ProjectUID: projectUID,
+		Actor:      "dns-explorer-test",
+		Entity: &model.Host{
+			IP:              "192.168.1.100",
+			Hostname:        "DC01",
+			OperatingSystem: "Windows Server 2022",
+		},
+		AssertionCtx: assertion.NewContext(),
+	})
+	if err != nil {
+		n.logger.Error("DNSExplorer", fmt.Sprintf("Test 1 failed: %v", err))
+		return err
+	}
+	n.logger.Info("DNSExplorer", fmt.Sprintf("Test 1 OK: created host uid=%s", result1.Entity.UID))
+
+	// --- Test 2: Gleichen Host nochmal → Merge erwartet ---
+	n.logger.Info("DNSExplorer", "Test 2: Merging existing host")
+	result2, err := n.services.HostService.UpsertHost(ctx, engine4.Input[*model.Host]{
+		ProjectUID: projectUID,
+		Actor:      "dns-explorer-test",
+		Entity: &model.Host{
+			IP:                     "192.168.1.100",
+			Hostname:               "DC01",
+			OperatingSystem:        "Windows Server 2022",
+			OperatingSystemVersion: "21H2",
+			IsDomainController:     true,
+		},
+		AssertionCtx: assertion.NewContext(),
+	})
+	if err != nil {
+		n.logger.Error("DNSExplorer", fmt.Sprintf("Test 2 failed: %v", err))
+		return err
+	}
+	n.logger.Info("DNSExplorer", fmt.Sprintf("Test 2 OK: merged host uid=%s", result2.Entity.UID))
+
+	// --- Test 3: Possible Duplicate ---
+	n.logger.Info("DNSExplorer", "Test 3: Possible duplicate")
+	result3, err := n.services.HostService.UpsertHost(ctx, engine4.Input[*model.Host]{
+		ProjectUID: projectUID,
+		Actor:      "dns-explorer-test",
+		Entity: &model.Host{
+			IP:       "192.168.1.100",
+			Hostname: "DC01-ALT",
+		},
+		AssertionCtx: assertion.NewContext(),
+	})
+	if err != nil {
+		n.logger.Error("DNSExplorer", fmt.Sprintf("Test 3 failed: %v", err))
+		return err
+	}
+	if result3 != nil {
+		n.logger.Info("DNSExplorer", fmt.Sprintf("Test 3 OK: possible duplicate flagged uid=%s", result3.Entity.UID))
+	}
+
+	n.logger.Info("DNSExplorer", "All UpsertHost tests completed")
 	return nil
 }

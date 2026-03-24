@@ -1,4 +1,4 @@
-package redpaths
+package modules
 
 import (
 	rperrors "RedPaths-server/internal/error"

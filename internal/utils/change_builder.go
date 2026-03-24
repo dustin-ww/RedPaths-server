@@ -19,7 +19,7 @@ func BuildChange(
 	}
 
 	c := &history.Change{
-		UID:        uuid.New(),
+		ID:         uuid.New(),
 		EntityType: before.EntityType(),
 		EntityUID:  before.EntityUID(),
 		Changes:    changes,

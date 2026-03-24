@@ -29,6 +29,7 @@ func NewProjectHandler(projectService *active_directory.ProjectService) *Project
 func (h *ProjectHandler) GetProjectOverviews(c *gin.Context) {
 	projectsOverviews, err := h.projectService.GetOverviewForAll(c.Request.Context())
 
+	log.Println("PROJECT DATE " + projectsOverviews[0].RedPathsMetadata.CreatedAt.String())
 	if err != nil {
 		errReturn := gin.H{
 			"error":   "Failed to get overview items for all projects",
@@ -39,29 +40,6 @@ func (h *ProjectHandler) GetProjectOverviews(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, projectsOverviews)
-}
-
-// Get returns a single project by its UID.
-func (h *ProjectHandler) Get(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
-
-	project, err := h.projectService.Get(c.Request.Context(), uid)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to retrieve project",
-			"details": err.Error(),
-		})
-		return
-	}
-	log.Println(*project)
-	c.JSON(http.StatusOK, project)
 }
 
 // Delete removes a project by its UID.
@@ -92,33 +70,6 @@ func (h *ProjectHandler) AddDomainWithHosts(c *gin.Context) {
 }
 
 // GetTargets returns all targets of a project.
-func (h *ProjectHandler) GetTargets(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
-
-	project, err := h.projectService.GetTargets(c.Request.Context(), uid)
-
-	if err != nil {
-		errReturn := gin.H{
-			"error":   "Failed to retrieve targets",
-			"details": err.Error(),
-		}
-
-		if err.Error() == "targets not found" {
-			c.JSON(http.StatusNotFound, errReturn)
-		} else {
-			c.JSON(http.StatusInternalServerError, errReturn)
-		}
-		return
-	}
-
-	c.JSON(http.StatusOK, project)
-}
 
 // CreateTarget creates a new target for a project.
 func (h *ProjectHandler) CreateTarget(c *gin.Context) {
@@ -214,8 +165,8 @@ func (h *ProjectHandler) UpdateProject(c *gin.Context) {
 	})
 }
 
-// AddActiveDirectory adds a new Active Directory forest to a project.
-func (h *ProjectHandler) AddActiveDirectory(c *gin.Context) {
+// AddProjectActiveDirectory adds a new Active Directory forest to a project.
+func (h *ProjectHandler) AddProjectActiveDirectory(c *gin.Context) {
 
 	var request requests.CreateActiveDirectory
 
@@ -256,147 +207,57 @@ func (h *ProjectHandler) AddActiveDirectory(c *gin.Context) {
 	})
 }
 
-// GetActiveDirectories retrieves all active directories for a project.
-func (h *ProjectHandler) GetActiveDirectories(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
-
-	activeDirectories, err := h.projectService.GetAllActiveDirectories(c.Request.Context(), uid)
-
-	if err != nil {
-		errReturn := gin.H{
-			"error":   "Failed to retrieve active directories",
-			"details": err.Error(),
-		}
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, errReturn)
-		return
-	}
-
-	c.JSON(http.StatusOK, activeDirectories)
+func (h *ProjectHandler) GetCatalogDomains(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve domains from catalog",
+		h.projectService.GetAllDomainsFromCatalog)
 }
 
-func (h *ProjectHandler) GetDirectoryNodes(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
-
-	directoryNodes, err := h.projectService.GetAllDirectoryNodes(c.Request.Context(), uid)
-
-	if err != nil {
-		errReturn := gin.H{
-			"error":   "Failed to retrieve directory nodes",
-			"details": err.Error(),
-		}
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, errReturn)
-		return
-	}
-
-	c.JSON(http.StatusOK, directoryNodes)
+func (h *ProjectHandler) GetCatalogHosts(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve hosts from catalog",
+		h.projectService.GetAllHostsFromCatalog)
 }
 
-func (h *ProjectHandler) GetDomains(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
-
-	domains, err := h.projectService.GetAllDomains(c.Request.Context(), uid)
-
-	if err != nil {
-		errReturn := gin.H{
-			"error":   "Failed to retrieve domainss",
-			"details": err.Error(),
-		}
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, errReturn)
-		return
-	}
-
-	c.JSON(http.StatusOK, domains)
+func (h *ProjectHandler) GetCatalogUsers(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve users from catalog",
+		h.projectService.GetAllUsersFromCatalog)
 }
 
-// GetHosts retrieves all hosts for a project.
-func (h *ProjectHandler) GetHosts(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
-
-	domains, err := h.projectService.GetHostsByProject(c.Request.Context(), uid)
-
-	if err != nil {
-		errReturn := gin.H{
-			"error":   "Failed to retrieve hosts",
-			"details": err.Error(),
-		}
-		c.JSON(http.StatusInternalServerError, errReturn)
-		return
-	}
-
-	c.JSON(http.StatusOK, domains)
+func (h *ProjectHandler) GetCatalogServices(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve services from catalog",
+		h.projectService.GetAllServicesFromCatalog)
 }
 
-// GetHosts retrieves all hosts for a project.
-func (h *ProjectHandler) GetServices(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
-
-	domains, err := h.projectService.GetServicesByProject(c.Request.Context(), uid)
-
-	if err != nil {
-		errReturn := gin.H{
-			"error":   "Failed to retrieve services",
-			"details": err.Error(),
-		}
-		c.JSON(http.StatusInternalServerError, errReturn)
-		return
-	}
-
-	c.JSON(http.StatusOK, domains)
+func (h *ProjectHandler) GetCatalogDirectoryNodes(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve directory nodes from catalog",
+		h.projectService.GetAllDirectoryNodesFromCatalog)
 }
 
-// GetUsers retrieves all users for a project.
-func (h *ProjectHandler) GetUsers(c *gin.Context) {
-	uid := c.Param("projectUID")
-	if uid == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Project UID is required",
-		})
-		return
-	}
+func (h *ProjectHandler) GetProjectActiveDirectories(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve active directories",
+		h.projectService.GetAllActiveDirectories)
+}
 
-	domains, err := h.projectService.GetAllUserInProject(c.Request.Context(), uid)
+func (h *ProjectHandler) GetTargets(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve targets",
+		h.projectService.GetTargets)
+}
 
-	if err != nil {
-		errReturn := gin.H{
-			"error":   "Failed to retrieve users",
-			"details": err.Error(),
-		}
-		c.JSON(http.StatusInternalServerError, errReturn)
-		return
-	}
+func (h *ProjectHandler) Get(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve project",
+		h.projectService.Get)
+}
 
-	c.JSON(http.StatusOK, domains)
+func (h *ProjectHandler) GetOrphanedDomains(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve orphaned domains from catalog",
+		h.projectService.GetOrphanedDomainsFromCatalog)
+}
+
+func (h *ProjectHandler) GetOrphanedHosts(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve orphaned hosts from catalog",
+		h.projectService.GetOrphanedHostsFromCatalog)
+}
+
+func (h *ProjectHandler) GetOrphanedUsers(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve orphaned users from catalog",
+		h.projectService.GetOrphanedUsersFromCatalog)
 }

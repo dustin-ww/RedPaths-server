@@ -1,7 +1,7 @@
 package active_directory
 
 import (
-	"RedPaths-server/internal/repository/dgraphutil"
+	dgraphutil2 "RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/active_directory/gpo"
 	"RedPaths-server/pkg/model/core"
@@ -27,6 +27,7 @@ type DomainRepository interface {
 	GetAllByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*active_directory.Domain], error)
 
 	GetGPOIfKnown(ctx context.Context, tx *dgo.Txn, gpoName string) ([]*gpo.GPO, error)
+	FindExisting(ctx context.Context, tx *dgo.Txn, projectUID string, domain *active_directory.Domain) (*dgraphutil2.ExistenceResult[*active_directory.Domain], error)
 }
 
 type DgraphDomainRepository struct {
@@ -38,12 +39,13 @@ func NewDgraphDomainRepository(db *dgo.Dgraph) *DgraphDomainRepository {
 }
 
 func (r *DgraphDomainRepository) Create(ctx context.Context, tx *dgo.Txn, incomingDomain *active_directory.Domain, actor string) (*active_directory.Domain, error) {
-	return dgraphutil.CreateEntity(ctx, tx, "Domain", incomingDomain)
+	dgraphutil2.InitCreateMetadata(&incomingDomain.RedPathsMetadata, actor)
+	return dgraphutil2.CreateEntity(ctx, tx, "Domain", incomingDomain)
 }
 
 func (r *DgraphDomainRepository) AddAssertion(ctx context.Context, tx *dgo.Txn, domainUID, assertionUID string) error {
 	relationName := "has_assertion"
-	err := dgraphutil.AddRelation(ctx, tx, domainUID, assertionUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, domainUID, assertionUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking red paths assertion %s to domain %s with relation %s", assertionUID, domainUID, relationName)
 	}
@@ -68,7 +70,7 @@ func (r *DgraphDomainRepository) FindByNameInActiveDirectory(ctx context.Context
 		"dgraph.type",
 	}
 
-	return dgraphutil.FindEntityByFieldViaAssertion[active_directory.Domain](
+	return dgraphutil2.FindEntityByFieldViaAssertion[active_directory.Domain](
 		ctx,
 		tx,
 		activeDirectoryUID,
@@ -98,9 +100,9 @@ func (r *DgraphDomainRepository) GetAllByProjectUID(ctx context.Context, tx *dgo
 		"dgraph.type",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertionsNHop[*active_directory.Domain](
+	return dgraphutil2.GetEntitiesWithAssertionsNHop[*active_directory.Domain](
 		ctx, tx, projectUID,
-		[]dgraphutil.HopConfig{
+		[]dgraphutil2.HopConfig{
 			{Predicate: core.PredicateHasActiveDirectory},
 			{Predicate: core.PredicateHasDomain, ObjectType: "Domain"},
 		},
@@ -131,7 +133,7 @@ func (r *DgraphDomainRepository) Get(ctx context.Context, tx *dgo.Txn, uid strin
 				last_seen_by
             }
         }`
-	return dgraphutil.GetEntityByUID[active_directory.Domain](ctx, tx, uid, "domain", query)
+	return dgraphutil2.GetEntityByUID[active_directory.Domain](ctx, tx, uid, "domain", query)
 
 }
 
@@ -155,7 +157,7 @@ func (r *DgraphDomainRepository) GetAllByActiveDirectoryUID(ctx context.Context,
 		"last_seen_by",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertions[*active_directory.Domain](
+	return dgraphutil2.GetEntitiesWithAssertions[*active_directory.Domain](
 		ctx,
 		tx,
 		activeDirectoryUID,
@@ -167,12 +169,62 @@ func (r *DgraphDomainRepository) GetAllByActiveDirectoryUID(ctx context.Context,
 }
 
 func (r *DgraphDomainRepository) Update(ctx context.Context, tx *dgo.Txn, uid string, actor string, fields map[string]interface{}) (*active_directory.Domain, error) {
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+}
+
+var domainHierarchyHops = []dgraphutil2.HopConfig{
+	{Predicate: core.PredicateHasActiveDirectory},
+	{Predicate: core.PredicateHasDomain, ObjectType: "Domain"},
+}
+
+var domainFields = []string{
+	"uid",
+	"domain.name",
+	"domain.dns_name",
+	"domain.netbios_name",
+	"domain.domain_guid",
+	"domain.domain_sid",
+	"domain.functional_level",
+	"domain.forest_functional_level",
+	"dgraph.type",
+}
+
+func BuildDomainFilter(domain *active_directory.Domain) []dgraphutil2.UniqueFieldFilter {
+	return []dgraphutil2.UniqueFieldFilter{
+		{Field: "domain.domain_guid", Value: domain.DomainGUID},
+		{Field: "domain.domain_sid", Value: domain.DomainSID},
+		{Field: "domain.dns_name", Value: domain.DNSName},
+		{Field: "domain.name", Value: domain.Name},
+	}
+}
+
+// FindExisting performs a two-phase existence check for a Domain.
+//
+// Phase 1: Searches via the project hierarchy (Project → AD → Domain).
+// Phase 2: Falls back to direct project-level search for orphaned domains.
+func (r *DgraphDomainRepository) FindExisting(
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectUID string,
+	domain *active_directory.Domain,
+) (*dgraphutil2.ExistenceResult[*active_directory.Domain], error) {
+
+	filters := BuildDomainFilter(domain)
+
+	return dgraphutil2.CheckEntityExists[*active_directory.Domain](
+		ctx, tx,
+		projectUID,
+		"Domain",
+		filters,
+		dgraphutil2.FilterModeOR,
+		domainFields,
+		domainHierarchyHops,
+	)
 }
 
 func (r *DgraphDomainRepository) AddGPOUtilityReference(ctx context.Context, tx *dgo.Txn, domainUID, gpoUID string) error {
 	relationName := "has_gpo"
-	err := dgraphutil.AddRelation(ctx, tx, domainUID, gpoUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, domainUID, gpoUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking gpo %s to domain %s with relation %s", gpoUID, domainUID, relationName)
 	}
@@ -181,8 +233,8 @@ func (r *DgraphDomainRepository) AddGPOUtilityReference(ctx context.Context, tx 
 }
 
 func (r *DgraphDomainRepository) GetGPOIfKnown(ctx context.Context, tx *dgo.Txn, gpoName string) ([]*gpo.GPO, error) {
-	//exists, err := dgraphutil.ExistsByField(ctx, tx, "GPO", "gpo.name", gpoName)
-	fetchedGPO, err := dgraphutil.GetEntityByField[*gpo.GPO](
+	//exists, err := dgraph.ExistsByField(ctx, tx, "GPO", "gpo.name", gpoName)
+	fetchedGPO, err := dgraphutil2.GetEntityByField[*gpo.GPO](
 		ctx, tx,
 		"GPO",
 		"gpo.name",
@@ -205,9 +257,9 @@ func (r *DgraphDomainRepository) GetKnownGPOs(ctx context.Context, tx *dgo.Txn, 
 		"dgraph.type",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertionsNHop[*gpo.GPO](
+	return dgraphutil2.GetEntitiesWithAssertionsNHop[*gpo.GPO](
 		ctx, tx, domainUID,
-		[]dgraphutil.HopConfig{
+		[]dgraphutil2.HopConfig{
 			{Predicate: core.PredicateHasGPOLink},
 			{Predicate: core.PredicateLinksTo, ObjectType: "Domain"},
 			{Predicate: core.PredicateContains, ObjectType: "DirectoryNode"},

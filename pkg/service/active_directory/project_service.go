@@ -4,8 +4,8 @@ import (
 	"RedPaths-server/internal/db"
 	rperror "RedPaths-server/internal/error"
 	"RedPaths-server/internal/repository/active_directory"
-	"RedPaths-server/internal/repository/changes"
-	"RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/repository/redpaths/changes"
+	"RedPaths-server/internal/repository/redpaths/engine"
 	"RedPaths-server/internal/utils"
 	"RedPaths-server/pkg/model"
 	rpad "RedPaths-server/pkg/model/active_directory"
@@ -13,6 +13,7 @@ import (
 	"RedPaths-server/pkg/model/core/res"
 	utils2 "RedPaths-server/pkg/model/utils"
 	"RedPaths-server/pkg/model/utils/assertion"
+	engine2 "RedPaths-server/pkg/service/catalog"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -37,7 +38,9 @@ type ProjectService struct {
 	userRepo            active_directory.UserRepository
 	directoryNodeRepo   active_directory.DirectoryNodeRepository
 	activeDirectoryRepo active_directory.ActiveDirectoryRepository
-	assertionRepo       redpaths.AssertionRepository
+	assertionRepo       engine.AssertionRepository
+
+	catalogService engine2.CatalogService
 
 	changeRepo changes.RedPathsChangeRepository
 	db         *dgo.Dgraph
@@ -58,8 +61,101 @@ func NewProjectService(dgraphCon *dgo.Dgraph, postgresCon *gorm.DB) (*ProjectSer
 		userRepo:            active_directory.NewDgraphUserRepository(dgraphCon),
 		serviceRepo:         active_directory.NewDgraphServiceRepository(dgraphCon),
 		directoryNodeRepo:   active_directory.NewDgraphDirectoryNodeRepository(dgraphCon),
-		assertionRepo:       redpaths.NewDgraphAssertionRepository(dgraphCon),
+		assertionRepo:       engine.NewDgraphAssertionRepository(dgraphCon),
+		catalogService:      *engine2.NewCatalogService(dgraphCon),
 	}, nil
+}
+
+func (s *ProjectService) GetAllDomainsFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.Domain], error) {
+	return engine2.GetFromCatalog[*rpad.Domain](ctx, &s.catalogService, projectUID, "Domain")
+}
+
+func (s *ProjectService) GetAllHostsFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*model.Host], error) {
+	return engine2.GetFromCatalog[*model.Host](ctx, &s.catalogService, projectUID, "Host")
+}
+
+func (s *ProjectService) GetAllServicesFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*model.Service], error) {
+	return engine2.GetFromCatalog[*model.Service](ctx, &s.catalogService, projectUID, "Service")
+}
+
+func (s *ProjectService) GetAllUsersFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.User], error) {
+	return engine2.GetFromCatalog[*rpad.User](ctx, &s.catalogService, projectUID, "User")
+}
+
+func (s *ProjectService) GetAllDirectoryNodesFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.DirectoryNode], error) {
+	return engine2.GetFromCatalog[*rpad.DirectoryNode](ctx, &s.catalogService, projectUID, "DirectoryNode")
+}
+
+func (s *ProjectService) AddEntityToProjectCatalog(
+	ctx context.Context,
+	incomingAssertion *core.Assertion,
+	projectUID, entityUID, actor string,
+) (*core.Assertion, error) {
+
+	// Orphaned = Parent noch nicht bekannt
+	// Predicate ist has_orphaned_entity bis Hierarchie geklärt ist
+	isOrphaned := !incomingAssertion.HasDiscoveredParent
+
+	predicate := core.PredicateHasHost // oder generisch aus incomingAssertion
+	status := core.StatusValidated
+	if isOrphaned {
+		predicate = core.PredicateHasOrphanedEntity
+		status = core.StatusOrphaned
+	}
+
+	catalogAssertion := &core.Assertion{
+		Predicate:           predicate,
+		Method:              incomingAssertion.Method, // Ursprung beibehalten
+		Source:              actor,
+		Confidence:          incomingAssertion.Confidence,
+		Status:              status,
+		Timestamp:           time.Now(),
+		HasDiscoveredParent: incomingAssertion.HasDiscoveredParent,
+		MarkedAsHighValue:   incomingAssertion.MarkedAsHighValue,
+		Subject:             &utils2.UIDRef{UID: projectUID, Type: "Project"},
+		Object:              &utils2.UIDRef{UID: entityUID, Type: incomingAssertion.Object.Type},
+	}
+
+	var created *core.Assertion
+	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
+		var err error
+		created, err = s.assertionRepo.Create(ctx, tx, catalogAssertion)
+		return err
+	})
+
+	return created, err
+}
+
+// Wenn Parent später gefunden wird:
+func (s *ProjectService) PromoteOrphanedEntity(
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectUID, entityUID string,
+	realPredicate core.Predicate,
+) error {
+	// 1. Orphaned-Assertion auf status=invalidated setzen
+	orphanedAssertions, _ := s.assertionRepo.GetAssertionsByPredicate(
+		ctx, tx, projectUID, core.PredicateHasOrphanedEntity,
+	)
+	for _, a := range orphanedAssertions {
+		if a.Object.UID == entityUID {
+			s.assertionRepo.Update(ctx, tx, a.UID, map[string]interface{}{
+				"assertion.status": core.StatusInvalidated,
+			})
+		}
+	}
+
+	// 2. Neue Katalog-Assertion mit korrektem Predicate anlegen
+	s.assertionRepo.Create(ctx, tx, &core.Assertion{
+		Predicate:           realPredicate,
+		Method:              core.MethodPromotion,
+		Status:              core.StatusValidated,
+		HasDiscoveredParent: true,
+		Subject:             &utils2.UIDRef{UID: projectUID, Type: "Project"},
+		Object:              &utils2.UIDRef{UID: entityUID},
+	})
+
+	return nil
 }
 
 func (s *ProjectService) AddActiveDirectory(
@@ -69,7 +165,7 @@ func (s *ProjectService) AddActiveDirectory(
 ) (*res.EntityResult[*rpad.ActiveDirectory], error) {
 	var result *res.EntityResult[*rpad.ActiveDirectory]
 
-	log.Printf("[AddActiveDirectory] forestName=%s, projectUID=%s, actor=%s",
+	log.Printf("[AddProjectActiveDirectory] forestName=%s, projectUID=%s, actor=%s",
 		incomingActiveDirectory.ForestName, projectUID, actor)
 
 	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
@@ -87,14 +183,14 @@ func (s *ProjectService) AddActiveDirectory(
 		if existingAD != nil {
 			// AD exists - reuse
 			ad = existingAD
-			log.Printf("[AddActiveDirectory] Reusing existing AD uid=%s", ad.UID)
+			log.Printf("[AddProjectActiveDirectory] Reusing existing AD uid=%s", ad.UID)
 		} else {
 			// Create new AD
 			ad, err = s.activeDirectoryRepo.Create(ctx, tx, incomingActiveDirectory, actor)
 			if err != nil {
 				return fmt.Errorf("creating AD: %w", err)
 			}
-			log.Printf("[AddActiveDirectory] Created new AD uid=%s", ad.UID)
+			log.Printf("[AddProjectActiveDirectory] Created new AD uid=%s", ad.UID)
 		}
 
 		// Create assertion (even if AD existed, link might be new)
@@ -161,6 +257,19 @@ func (s *ProjectService) GetAllDomains(ctx context.Context, projectUID string) (
 	return db.ExecuteRead(ctx, s.db, func(tx *dgo.Txn) ([]*res.EntityResult[*rpad.Domain], error) {
 		return s.domainRepo.GetAllByProjectUID(ctx, tx, projectUID)
 	})
+}
+
+// Service
+func (s *ProjectService) GetOrphanedDomainsFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.Domain], error) {
+	return engine2.GetOrphanedFromCatalog[*rpad.Domain](ctx, &s.catalogService, projectUID, "Domain")
+}
+
+func (s *ProjectService) GetOrphanedHostsFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*model.Host], error) {
+	return engine2.GetOrphanedFromCatalog[*model.Host](ctx, &s.catalogService, projectUID, "Host")
+}
+
+func (s *ProjectService) GetOrphanedUsersFromCatalog(ctx context.Context, projectUID string) ([]*res.EntityResult[*rpad.User], error) {
+	return engine2.GetOrphanedFromCatalog[*rpad.User](ctx, &s.catalogService, projectUID, "User")
 }
 
 // CreateTarget creates a new target and links it to a project.

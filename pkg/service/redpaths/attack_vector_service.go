@@ -2,8 +2,8 @@
 package redpaths
 
 import (
-	"RedPaths-server/internal/recom"
-	rp "RedPaths-server/internal/repository/redpaths"
+	"RedPaths-server/internal/recommendation"
+	rp "RedPaths-server/internal/repository/redpaths/modules"
 	"RedPaths-server/pkg/interfaces"
 	"RedPaths-server/pkg/model/events"
 	"RedPaths-server/pkg/model/redpaths"
@@ -19,7 +19,7 @@ import (
 )
 
 // RunAttackVector runs an attack vector starting with the target module
-func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey string, params *input.Parameter, executor interfaces.ModuleExecutor, recommender *recom.Engine, moduleService *ModuleService) (string, error) {
+func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey string, params *input.Parameter, executor interfaces.ModuleExecutor, recommender *recommendation.Engine, moduleService *ModuleService) (string, error) {
 	// Generate a unique run ID
 	vectorRunID := uuid.New().String()
 	log.Println("Starting Execution with vectorRunID: " + vectorRunID)
@@ -72,7 +72,7 @@ func RunAttackVector(ctx context.Context, postgresCon *gorm.DB, targetModuleKey 
 		return "", fmt.Errorf("failed to create module service: %w", err)
 	}
 
-	// Get the attack vector modules
+	// GetProjectActiveDirectory the attack vector modules
 	moduleDependencies, err := moduleService.GetAttackVectorByKey(ctx, targetModuleKey)
 	if err != nil {
 		logger.Error("Failed to get attack vector", map[string]interface{}{

@@ -15,7 +15,7 @@ var schemaSQL string
 
 // InitializePostgresScheme initializes the PostgreSQL schema
 func InitializePostgresScheme(gormDB *gorm.DB) error {
-	// Get the underlying *sql.DB from GORM
+	// GetProjectActiveDirectory the underlying *sql.DB from GORM
 	sqlDB, err := gormDB.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get SQL DB from GORM: %v", err)

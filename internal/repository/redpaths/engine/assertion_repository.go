@@ -1,12 +1,12 @@
-package redpaths
+package engine
 
 import (
+	"RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model/utils"
 	"context"
 	"fmt"
 	"time"
 
-	"RedPaths-server/internal/repository/dgraphutil"
 	"RedPaths-server/pkg/model/core"
 
 	"github.com/dgraph-io/dgo/v210"
@@ -78,7 +78,7 @@ func NewDgraphAssertionRepository(db *dgo.Dgraph) *DgraphAssertionRepository {
 }
 
 func (r *DgraphAssertionRepository) Create(ctx context.Context, tx *dgo.Txn, assertion *core.Assertion) (*core.Assertion, error) {
-	uid, err := dgraphutil.OldCreateEntity(ctx, tx, "Assertion", assertion)
+	uid, err := dgraph.OldCreateEntity(ctx, tx, "Assertion", assertion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create assertion: %w", err)
 	}
@@ -103,11 +103,11 @@ func (r *DgraphAssertionRepository) Get(ctx context.Context, tx *dgo.Txn, assert
 				assertion.high_value_marked
 			}
 		}`
-	return dgraphutil.GetEntityByUID[core.Assertion](ctx, tx, assertionUID, "assertion", query)
+	return dgraph.GetEntityByUID[core.Assertion](ctx, tx, assertionUID, "assertion", query)
 }
 
 func (r *DgraphAssertionRepository) Update(ctx context.Context, tx *dgo.Txn, uid string, fields map[string]interface{}) (*core.Assertion, error) {
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, "", fields, r.Get)
+	return dgraph.UpdateAndGet(ctx, tx, uid, "", fields, r.Get)
 }
 
 func (r *DgraphAssertionRepository) Link(ctx context.Context, tx *dgo.Txn, subjectUID, objectUID string, predicate core.Predicate, method core.Method, actor string, confidence float64) (*core.Assertion, error) {
@@ -138,7 +138,7 @@ func (r *DgraphAssertionRepository) GetBySubjectUID(ctx context.Context, tx *dgo
 		"assertion.note",
 		"assertion.high_value_marked",
 	}
-	return dgraphutil.GetEntitiesByRelation[*core.Assertion](ctx, tx, "Assertion", "assertion.subject", subjectUID, fields)
+	return dgraph.GetEntitiesByRelation[*core.Assertion](ctx, tx, "Assertion", "assertion.subject", subjectUID, fields)
 }
 
 func (r *DgraphAssertionRepository) GetByObjectUID(ctx context.Context, tx *dgo.Txn, objectUID string) ([]*core.Assertion, error) {
@@ -154,5 +154,5 @@ func (r *DgraphAssertionRepository) GetByObjectUID(ctx context.Context, tx *dgo.
 		"assertion.note",
 		"assertion.high_value_marked",
 	}
-	return dgraphutil.GetEntitiesByRelation[*core.Assertion](ctx, tx, "Assertion", "assertion.object", objectUID, fields)
+	return dgraph.GetEntitiesByRelation[*core.Assertion](ctx, tx, "Assertion", "assertion.object", objectUID, fields)
 }

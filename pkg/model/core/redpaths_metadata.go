@@ -14,6 +14,8 @@ type RedPathsMetadata struct {
 	ModifiedAt   time.Time `json:"modified_at,omitempty"`
 	ValidatedAt  time.Time `json:"last_validated_at,omitempty"`
 	ValidatedBy  string    `json:"last_validated_by,omitempty"`
+
+	Version int `json:"version,omitempty"`
 }
 
 // UnmarshalWithMetadata unmarshals JSON and extracts RPMetadata
@@ -31,6 +33,7 @@ func UnmarshalWithMetadata(data []byte, target interface{}, metadata *RedPathsMe
 		LastSeenBy   string    `json:"last_seen_by,omitempty"`
 		ValidatedAt  time.Time `json:"validated_at,omitempty"`
 		ValidatedBy  string    `json:"validated_by,omitempty"`
+		Version      int       `json:"version,omitempty"`
 	}
 
 	if err := json.Unmarshal(data, &aux); err != nil {
@@ -46,6 +49,7 @@ func UnmarshalWithMetadata(data []byte, target interface{}, metadata *RedPathsMe
 		LastSeenBy:   aux.LastSeenBy,
 		ValidatedAt:  aux.ValidatedAt,
 		ValidatedBy:  aux.ValidatedBy,
+		Version:      aux.Version,
 	}
 
 	return nil
@@ -86,6 +90,9 @@ func MarshalWithMetadata(target interface{}, metadata RedPathsMetadata) ([]byte,
 	}
 	if metadata.LastSeenBy != "" {
 		targetMap["last_seen_by"] = metadata.LastSeenBy
+	}
+	if metadata.Version != 0 {
+		targetMap["version"] = metadata.Version
 	}
 
 	return json.Marshal(targetMap)

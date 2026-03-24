@@ -1,7 +1,7 @@
 package active_directory
 
 import (
-	"RedPaths-server/internal/repository/dgraphutil"
+	dgraphutil2 "RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model"
 	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/core/res"
@@ -30,12 +30,12 @@ type DgraphServiceRepository struct {
 }
 
 func (r *DgraphServiceRepository) Create(ctx context.Context, tx *dgo.Txn, service *model.Service, actor string) (*model.Service, error) {
-	dgraphutil.InitCreateMetadata(&service.RedPathsMetadata, actor)
-	return dgraphutil.CreateEntity(ctx, tx, "Service", service)
+	dgraphutil2.InitCreateMetadata(&service.RedPathsMetadata, actor)
+	return dgraphutil2.CreateEntity(ctx, tx, "Service", service)
 }
 
 func (r *DgraphServiceRepository) UpdateService(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Service, error) {
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, r.Get)
 }
 
 func NewDgraphServiceRepository(db *dgo.Dgraph) *DgraphServiceRepository {
@@ -43,7 +43,7 @@ func NewDgraphServiceRepository(db *dgo.Dgraph) *DgraphServiceRepository {
 }
 
 func (r *DraphHostRepository) ServiceExistsByPortOnHost(ctx context.Context, tx *dgo.Txn, projectUID, ip string) (bool, error) {
-	return dgraphutil.ExistsByFieldInProject(ctx, tx, projectUID, "Host", "ip", ip)
+	return dgraphutil2.ExistsByFieldInProject(ctx, tx, projectUID, "Host", "ip", ip)
 }
 
 func (r *DgraphServiceRepository) GetByProjectUID(ctx context.Context, tx *dgo.Txn, projectUID string) ([]*res.EntityResult[*model.Service], error) {
@@ -56,9 +56,9 @@ func (r *DgraphServiceRepository) GetByProjectUID(ctx context.Context, tx *dgo.T
 		"dgraph.type",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertionsNHop[*model.Service](
+	return dgraphutil2.GetEntitiesWithAssertionsNHop[*model.Service](
 		ctx, tx, projectUID,
-		[]dgraphutil.HopConfig{
+		[]dgraphutil2.HopConfig{
 			{Predicate: core.PredicateHasActiveDirectory},
 			{Predicate: core.PredicateHasDomain, ObjectType: "Domain"},
 			{Predicate: core.PredicateHasHost, ObjectType: "Host"},
@@ -73,22 +73,25 @@ func (r *DgraphServiceRepository) GetByProjectUID(ctx context.Context, tx *dgo.T
 func (r *DgraphServiceRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*model.Service, error) {
 	query := `
         query Service($uid: string) {
-            Service(func: uid($uid)) {
+            service(func: uid($uid)) {
                 uid
-                name
-				dgraph.type
-				port
-                deployed_on_host { uid }
+                service.name
+                service.port
+                service.protocol
+                service.product
+                service.version
+                created_at
+                modified_at
+                dgraph.type
             }
         }`
-
-	return dgraphutil.GetEntityByUID[model.Service](ctx, tx, uid, "service", query)
+	return dgraphutil2.GetEntityByUID[model.Service](ctx, tx, uid, "service", query)
 }
 
 func (r *DgraphServiceRepository) LinkToHost(ctx context.Context, tx *dgo.Txn, serviceUID, hostUID string) error {
 	relationName := "deployed_on_host"
 	log.Printf("LINKING: service %s and host %s", serviceUID, hostUID)
-	err := dgraphutil.AddRelation(ctx, tx, serviceUID, hostUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, serviceUID, hostUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while reverse linking service %s to host %s with relation name %s", serviceUID, hostUID, relationName)
 	}
@@ -110,7 +113,7 @@ func (r *DgraphServiceRepository) GetByHostUID(ctx context.Context, tx *dgo.Txn,
 		"dgraph.type",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertions[*model.Service](
+	return dgraphutil2.GetEntitiesWithAssertions[*model.Service](
 		ctx,
 		tx,
 		hostUID,

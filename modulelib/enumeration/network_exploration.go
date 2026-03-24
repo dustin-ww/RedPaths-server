@@ -14,6 +14,7 @@ import (
 	"RedPaths-server/pkg/model/rpsdk"
 	"RedPaths-server/pkg/model/utils/assertion"
 	plugin "RedPaths-server/pkg/module_exec"
+	"RedPaths-server/pkg/service/upsert"
 	"RedPaths-server/pkg/sse"
 	"context"
 	"fmt"
@@ -26,9 +27,7 @@ import (
 )
 
 func init() {
-	m := &NetworkExplorer{
-		configKey: "NetworkExplorer",
-	}
+	m := &NetworkExplorer{configKey: "NetworkExplorer"}
 	plugin.RegisterPlugin(m)
 }
 
@@ -38,9 +37,8 @@ type NetworkExplorer struct {
 	logger    *sse.SSELogger
 }
 
-func (n *NetworkExplorer) SetServices(services *rpsdk.Services) {
-	n.services = services
-}
+func (n *NetworkExplorer) SetServices(services *rpsdk.Services) { n.services = services }
+func (n *NetworkExplorer) ConfigKey() string                    { return n.configKey }
 
 func (n *NetworkExplorer) GetMetadata() *interfaces.ModuleMetadata {
 	return &interfaces.ModuleMetadata{
@@ -48,71 +46,31 @@ func (n *NetworkExplorer) GetMetadata() *interfaces.ModuleMetadata {
 		Category:    "enumeration",
 		Description: "Performs network-wide enumeration using Nmap to identify live hosts, open ports and services",
 		Prerequisites: []*module.Prerequisite{
-			{
-				Type:        module.PrereqNetworkAccess,
-				Name:        "Network Reachability",
-				Description: "Target network must be reachable from the scanning interface",
-				Required:    true,
-				Conditions:  "network.reachable = true",
-			},
-			{
-				Type:        module.PrereqKnowledge,
-				Name:        "Target Network Range",
-				Description: "CIDR or IP range to scan",
-				Required:    true,
-				Conditions:  "target.cidr != null",
-			},
+			{Type: module.PrereqNetworkAccess, Name: "Network Reachability", Required: true, Conditions: "network.reachable = true"},
+			{Type: module.PrereqKnowledge, Name: "Target Network Range", Required: true, Conditions: "target.cidr != null"},
 		},
 		Provides: []*module.Capability{
-			{
-				Type:        "network_discovery",
-				Name:        "Host Discovery",
-				Description: "Discovers live hosts in the target network",
-				Confidence:  0.95,
-				Metadata:    map[string]interface{}{"method": "icmp,tcp,syn"},
-			},
-			{
-				Type:        "service_enumeration",
-				Name:        "Service & Port Enumeration",
-				Description: "Identifies open ports, protocols and running services",
-				Confidence:  0.9,
-				Metadata:    map[string]interface{}{"ports": "1-65535", "versions": true},
-			},
-			{
-				Type:        "os_fingerprinting",
-				Name:        "Operating System Detection",
-				Description: "Attempts to identify the operating system of discovered hosts",
-				Confidence:  0.75,
-			},
+			{Type: "network_discovery", Name: "Host Discovery", Confidence: 0.95, Metadata: map[string]interface{}{"method": "icmp,tcp,syn"}},
+			{Type: "service_enumeration", Name: "Service & Port Enumeration", Confidence: 0.9, Metadata: map[string]interface{}{"ports": "1-65535", "versions": true}},
+			{Type: "os_fingerprinting", Name: "Operating System Detection", Confidence: 0.75},
 		},
-		Risk:       3,
-		Stealth:    2,
-		Complexity: 3,
+		Risk: 3, Stealth: 2, Complexity: 3,
 	}
 }
 
-func (n *NetworkExplorer) ConfigKey() string {
-	return n.configKey
-}
+// ── Assertion contexts ────────────────────────────────────────────────────────
 
-// Reusable assertion contexts — defined once, shared across all service calls.
-// Scan-detected entities get 0.85 confidence; direct topology links get 0.95.
 var (
-	// assertCtxAD is used when creating an ActiveDirectory or Domain node from scan data.
 	assertCtxAD = assertion.Context{
 		Confidence: float64Ptr(0.85),
 		Status:     strPtr("scan_detected"),
 		HighValue:  boolPtr(false),
 	}
-
-	// assertCtxHost is used when linking a discovered host to a domain.
 	assertCtxHost = assertion.Context{
 		Confidence: float64Ptr(0.95),
 		Status:     strPtr("scan_detected"),
 		HighValue:  boolPtr(false),
 	}
-
-	// assertCtxService is used when attaching open-port services to a host.
 	assertCtxService = assertion.Context{
 		Confidence: float64Ptr(0.90),
 		Status:     strPtr("scan_detected"),
@@ -123,6 +81,46 @@ var (
 func float64Ptr(v float64) *float64 { return &v }
 func strPtr(v string) *string       { return &v }
 func boolPtr(v bool) *bool          { return &v }
+
+// ── DC port scoring ───────────────────────────────────────────────────────────
+
+type dcPortRule struct {
+	port       string
+	score      int
+	definitive bool
+}
+
+var dcPortRules = []dcPortRule{
+	{port: "88", score: 3, definitive: true},
+	{port: "389", score: 2},
+	{port: "636", score: 2},
+	{port: "3268", score: 2},
+	{port: "3269", score: 2},
+	{port: "464", score: 1},
+	{port: "53", score: 1},
+	{port: "445", score: 0},
+}
+
+const dcScoreThreshold = 3
+
+func isDomainController(document *xmlquery.Node, xb *internal.XPathBuilder) (bool, int, []string) {
+	score := 0
+	var matched []string
+
+	for _, rule := range dcPortRules {
+		if xmlquery.FindOne(document, xb.OpenPort(rule.port)) != nil {
+			matched = append(matched, rule.port)
+			score += rule.score
+			if rule.definitive {
+				return true, score, matched
+			}
+		}
+	}
+
+	return score >= dcScoreThreshold, score, matched
+}
+
+// ── ExecuteModule ─────────────────────────────────────────────────────────────
 
 func (n *NetworkExplorer) ExecuteModule(params *input.Parameter, logger *sse.SSELogger) error {
 	n.logger = logger
@@ -144,10 +142,7 @@ func (n *NetworkExplorer) ExecuteModule(params *input.Parameter, logger *sse.SSE
 	scanCtx, scanCancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer scanCancel()
 
-	// For Testing purposes
-	targetNetwork := "127.0.0.1"
-
-	log.Println("Using target for network enumeration: " + targetNetwork)
+	targetNetwork := "127.0.0.1" // Testing only
 
 	scanResult, err := scanAdapter.Scan(
 		scanCtx,
@@ -166,102 +161,143 @@ func (n *NetworkExplorer) ExecuteModule(params *input.Parameter, logger *sse.SSE
 		return fmt.Errorf("could not map scan result to nmap result: %v", scanResult)
 	}
 
+	log.Printf("[DEBUG] ExecuteModule: scan done, starting processScanResults")
+
 	if err := n.processScanResults(context.Background(), *nmapResult, params); err != nil {
 		return fmt.Errorf("processing scan results failed: %w", err)
 	}
 
-	sse.NewEvent(events.ScanComplete).
-		WithData("timestamp", time.Now().Unix()).
-		Log(logger)
-
+	sse.NewEvent(events.ScanComplete).WithData("timestamp", time.Now().Unix()).Log(logger)
 	return nil
 }
 
-// processScanResults builds the full hierarchy for every discovered host:
-// Project → ActiveDirectory → Domain → Host → Services
-func (n *NetworkExplorer) processScanResults(ctx context.Context, nmapResult scan.NmapScanResult, params *input.Parameter) error {
+// ── processScanResults ────────────────────────────────────────────────────────
+
+func (n *NetworkExplorer) processScanResults(
+	ctx context.Context,
+	nmapResult scan.NmapScanResult,
+	params *input.Parameter,
+) error {
 	document, err := nmapResult.GetXMLDocument()
 	if err != nil {
 		return fmt.Errorf("failed to parse nmap XML: %w", err)
 	}
 
-	// Local caches avoid redundant DB calls for hosts sharing a domain/forest.
-	domainCache := make(map[string]string)          // domainName -> domainUID
-	activeDirectoryCache := make(map[string]string) // forestRoot -> adUID
+	hosts := nmapResult.GetNmapResult().Host
+	log.Printf("[DEBUG] processScanResults: hostCount=%d projectUID=%s",
+		len(hosts), params.ProjectUID)
 
-	for _, host := range nmapResult.GetNmapResult().Host {
+	if len(hosts) == 0 {
+		log.Printf("[DEBUG] WARNING: host list empty — nothing to process")
+		return nil
+	}
+
+	adCache := make(map[string]string)
+	domainCache := make(map[string]string)
+
+	for i, host := range hosts {
 		ip := host.Address[0].Addr
+		log.Printf("[DEBUG] ── host[%d] ip=%s ──────────────────────────", i, ip)
+
 		xb := internal.NewXPathBuilder(ip)
 
-		// 1. Extract domain name and forest root from nmap fingerprints
 		domainName, strategy := n.extractDomainName(document, xb)
-		forestRoot := n.extractForestRoot(document, ip)
+		forestRoot := n.extractForestRoot(xb, document)
 		if forestRoot == "" {
 			forestRoot = domainName
 		}
 
-		// 2. Ensure ActiveDirectory (forest level)
-		var activeDirectoryUID string
+		log.Printf("[DEBUG] host[%d] ip=%s domainName=%q forestRoot=%q strategy=%q",
+			i, ip, domainName, forestRoot, strategy)
+
+		// ── ActiveDirectory (Forest) ──────────────────────────────────────────
+		var adUID string
 		if forestRoot != "" {
-			adUID, cached := activeDirectoryCache[forestRoot]
-			if !cached {
-				adUID, err = n.ensureActiveDirectory(ctx, params.ProjectUID, forestRoot)
+			if cached, ok := adCache[forestRoot]; ok {
+				adUID = cached
+				log.Printf("[DEBUG] host[%d] AD cache hit forest=%s uid=%s", i, forestRoot, adUID)
+			} else {
+				log.Printf("[DEBUG] host[%d] calling upsertActiveDirectory forest=%s", i, forestRoot)
+				adUID, err = n.upsertActiveDirectory(ctx, params.ProjectUID, forestRoot)
 				if err != nil {
-					n.logger.Error("failed to ensure AD", "forest", forestRoot, "error", err)
+					log.Printf("[ERROR] host[%d] upsertActiveDirectory failed forest=%s err=%v",
+						i, forestRoot, err)
 				} else {
-					activeDirectoryCache[forestRoot] = adUID
+					adCache[forestRoot] = adUID
+					log.Printf("[DEBUG] host[%d] upsertActiveDirectory ok forest=%s uid=%s",
+						i, forestRoot, adUID)
 				}
 			}
-			activeDirectoryUID = adUID
+		} else {
+			log.Printf("[DEBUG] host[%d] ip=%s no forestRoot — skipping AD upsert", i, ip)
 		}
 
-		// 3. Ensure Domain under ActiveDirectory
+		// ── Domain ───────────────────────────────────────────────────────────
 		var domainUID string
 		if domainName != "" {
-			uid, cached := domainCache[domainName]
-			if !cached {
-				uid, err = n.ensureDomain(ctx, activeDirectoryUID, domainName, strategy)
+			if cached, ok := domainCache[domainName]; ok {
+				domainUID = cached
+				log.Printf("[DEBUG] host[%d] Domain cache hit domain=%s uid=%s", i, domainName, domainUID)
+			} else {
+				log.Printf("[DEBUG] host[%d] calling upsertDomain domain=%s adUID=%s", i, domainName, adUID)
+				domainUID, err = n.upsertDomain(ctx, params.ProjectUID, adUID, domainName, strategy)
 				if err != nil {
-					n.logger.Error("failed to ensure domain", "domain", domainName, "error", err)
+					log.Printf("[ERROR] host[%d] upsertDomain failed domain=%s err=%v",
+						i, domainName, err)
 				} else {
-					domainCache[domainName] = uid
+					domainCache[domainName] = domainUID
+					log.Printf("[DEBUG] host[%d] upsertDomain ok domain=%s uid=%s",
+						i, domainName, domainUID)
 				}
 			}
-			domainUID = uid
+		} else {
+			log.Printf("[DEBUG] host[%d] ip=%s no domainName — host will be orphaned", i, ip)
 		}
 
-		// 4. Build Host
-		hostUID, err := n.buildHost(ctx, document, xb, ip, domainUID, params)
+		// ── Host ─────────────────────────────────────────────────────────────
+		log.Printf("[DEBUG] host[%d] calling upsertHost ip=%s domainUID=%s", i, ip, domainUID)
+		hostUID, err := n.upsertHost(ctx, document, xb, ip, domainUID, params)
 		if err != nil {
-			n.logger.Error("failed to build host", "ip", ip, "error", err)
+			log.Printf("[ERROR] host[%d] upsertHost failed ip=%s err=%v", i, ip, err)
 			continue
 		}
+		log.Printf("[DEBUG] host[%d] upsertHost ok ip=%s uid=%s", i, ip, hostUID)
 
-		// 5. Build Services
-		n.buildServices(ctx, host, hostUID)
+		// ── Services ─────────────────────────────────────────────────────────
+		log.Printf("[DEBUG] host[%d] calling upsertServices hostUID=%s", i, hostUID)
+		n.upsertServices(ctx, host, hostUID)
 	}
 
+	log.Printf("[DEBUG] processScanResults: done")
 	return nil
 }
 
-func (n *NetworkExplorer) ensureActiveDirectory(ctx context.Context, projectUID, forestRoot string) (string, error) {
-	//existing, err := n.services.ProjectService.GetActiveDirectoryByForest(ctx, projectUID, forestRoot)
-	//if err == nil && existing != nil {
-	//	log.Printf("[NetworkExplorer] Reusing existing AD uid=%s forest=%s", existing.UID, forestRoot)
-	//	return existing.UID, nil
-	//}
+// ── upsertActiveDirectory ─────────────────────────────────────────────────────
 
-	assertCtxAD = assertion.Context{
-		Confidence: float64Ptr(0.85),
-		Status:     strPtr("scan_detected"),
-		HighValue:  boolPtr(false),
-	}
+func (n *NetworkExplorer) upsertActiveDirectory(
+	ctx context.Context,
+	projectUID string,
+	forestRoot string,
+) (string, error) {
+	log.Printf("[DEBUG] upsertActiveDirectory: projectUID=%s forestRoot=%s", projectUID, forestRoot)
 
-	ad := &active_directory.ActiveDirectory{ForestName: forestRoot}
-	adUID, err := n.services.ProjectService.AddActiveDirectory(ctx, assertCtxAD, projectUID, ad, n.configKey)
+	result, err := n.services.ActiveDirectoryService.UpsertActiveDirectory(
+		ctx,
+		upsert.Input[*active_directory.ActiveDirectory]{
+			Entity:       &active_directory.ActiveDirectory{ForestName: forestRoot},
+			ProjectUID:   projectUID,
+			ParentUID:    nil,
+			ParentType:   "Project",
+			AssertionCtx: assertCtxAD,
+			Actor:        n.configKey,
+		},
+	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create ActiveDirectory for forest %s: %w", forestRoot, err)
+		log.Printf("[ERROR] upsertActiveDirectory: UpsertActiveDirectory returned err=%v", err)
+		return "", fmt.Errorf("UpsertActiveDirectory failed for forest %s: %w", forestRoot, err)
 	}
+
+	log.Printf("[DEBUG] upsertActiveDirectory: result uid=%s", result.Entity.UID)
 
 	sse.NewEvent(events.DomainDiscovered).
 		WithData("type", "active_directory").
@@ -269,23 +305,46 @@ func (n *NetworkExplorer) ensureActiveDirectory(ctx context.Context, projectUID,
 		WithData("timestamp", time.Now().Unix()).
 		Log(n.logger)
 
-	log.Printf("[NetworkExplorer] Created AD uid=%s forest=%s", adUID, forestRoot)
-	return adUID.Entity.UID, nil
+	log.Printf("[NetworkExplorer] AD upserted uid=%s forest=%s", result.Entity.UID, forestRoot)
+	return result.Entity.UID, nil
 }
 
-func (n *NetworkExplorer) ensureDomain(ctx context.Context, activeDirectoryUID, domainName, strategy string) (string, error) {
-	incomingDomain := &active_directory.Domain{Name: domainName}
+// ── upsertDomain ──────────────────────────────────────────────────────────────
 
-	result, err := n.services.ActiveDirectoryService.AddDomain(
+func (n *NetworkExplorer) upsertDomain(
+	ctx context.Context,
+	projectUID string,
+	adUID string,
+	domainName string,
+	strategy string,
+) (string, error) {
+	var parentUID *string
+	parentType := "Project"
+	if adUID != "" {
+		parentUID = &adUID
+		parentType = "ActiveDirectory"
+	}
+
+	log.Printf("[DEBUG] upsertDomain: projectUID=%s adUID=%s domainName=%s parentType=%s",
+		projectUID, adUID, domainName, parentType)
+
+	result, err := n.services.DomainService.UpsertDomain(
 		ctx,
-		activeDirectoryUID,
-		incomingDomain,
-		assertCtxAD,
-		n.configKey,
+		upsert.Input[*active_directory.Domain]{
+			Entity:       &active_directory.Domain{Name: domainName},
+			ProjectUID:   projectUID,
+			ParentUID:    parentUID,
+			ParentType:   parentType,
+			AssertionCtx: assertCtxAD,
+			Actor:        n.configKey,
+		},
 	)
 	if err != nil {
-		return "", fmt.Errorf("AddDomain failed for %s: %w", domainName, err)
+		log.Printf("[ERROR] upsertDomain: UpsertDomain returned err=%v", err)
+		return "", fmt.Errorf("UpsertDomain failed for %s: %w", domainName, err)
 	}
+
+	log.Printf("[DEBUG] upsertDomain: result uid=%s", result.Entity.UID)
 
 	sse.NewEvent(events.DomainDiscovered).
 		WithData("domain", domainName).
@@ -293,15 +352,19 @@ func (n *NetworkExplorer) ensureDomain(ctx context.Context, activeDirectoryUID, 
 		WithData("timestamp", time.Now().Unix()).
 		Log(n.logger)
 
-	log.Printf("[NetworkExplorer] Domain ensured: name=%s uid=%s", domainName, result.Entity.UID)
+	log.Printf("[NetworkExplorer] Domain upserted name=%s uid=%s strategy=%s",
+		domainName, result.Entity.UID, strategy)
 	return result.Entity.UID, nil
 }
 
-func (n *NetworkExplorer) buildHost(
+// ── upsertHost ────────────────────────────────────────────────────────────────
+
+func (n *NetworkExplorer) upsertHost(
 	ctx context.Context,
 	document *xmlquery.Node,
 	xb *internal.XPathBuilder,
-	ip, domainUID string,
+	ip string,
+	domainUID string,
 	params *input.Parameter,
 ) (string, error) {
 	if ip == "" {
@@ -311,87 +374,144 @@ func (n *NetworkExplorer) buildHost(
 		return "", fmt.Errorf("parameters cannot be nil")
 	}
 
-	hostBuilder := model.NewHostBuilder().WithIP(ip)
+	log.Printf("[DEBUG] upsertHost: ip=%s domainUID=%s projectUID=%s", ip, domainUID, params.ProjectUID)
 
+	b := model.NewHostBuilder().WithIP(ip)
+
+	// ── Name ──────────────────────────────────────────────────────────────────
 	if hostNode := xmlquery.FindOne(document, xb.Host()); hostNode != nil {
-		if hostnameNode := xmlquery.FindOne(hostNode, xb.Hostname()); hostnameNode != nil {
-			hostname := hostnameNode.InnerText()
-			log.Printf("[NetworkExplorer] Hostname %s resolved for ip %s", hostname, ip)
-			hostBuilder.WithName(hostname)
+		if node := xmlquery.FindOne(hostNode, xb.Hostname()); node != nil {
+			if v := strings.TrimSpace(node.InnerText()); v != "" {
+				b.WithName(v)
+			}
 		}
 	}
+	if netbios := firstText(document, xb.NetBIOSComputerNameRDP(), xb.NetBIOSComputerNameSQL()); netbios != "" {
+		b.WithName(netbios)
+	}
 
-	host, err := hostBuilder.Build()
+	// ── DNS FQDN ──────────────────────────────────────────────────────────────
+	if fqdn := firstText(document, xb.DNSComputerNameRDP(), xb.DNSComputerNameSQL(), xb.SMBFQDN()); fqdn != "" {
+		b.WithDNSHostName(fqdn)
+	}
+
+	// ── Operating System ──────────────────────────────────────────────────────
+	if osStr := firstText(document, xb.SMBOS()); osStr != "" {
+		b.WithOperatingSystem(osStr)
+	} else if osType := firstText(document, xb.ServiceOSType()); osType != "" {
+		b.WithOperatingSystem(osType)
+	}
+
+	// ── OS Version ────────────────────────────────────────────────────────────
+	if version := firstText(document, xb.ProductVersionRDP(), xb.ProductVersionSQL()); version != "" {
+		b.WithOperatingSystemVersion(version)
+	}
+
+	// ── Domain Controller ─────────────────────────────────────────────────────
+	dc, score, matchedPorts := isDomainController(document, xb)
+	if dc {
+		b.AsDomainController()
+		log.Printf("[NetworkExplorer] %s: DC detected (score=%d, ports=%v)", ip, score, matchedPorts)
+	} else {
+		log.Printf("[NetworkExplorer] %s: not a DC (score=%d, ports=%v)", ip, score, matchedPorts)
+	}
+
+	host, err := b.Build()
 	if err != nil {
+		log.Printf("[ERROR] upsertHost: Build failed ip=%s err=%v", ip, err)
 		return "", fmt.Errorf("failed to build host model: %w", err)
 	}
 
-	var hostUID string
+	log.Printf("[DEBUG] upsertHost: host built ip=%s hostname=%s os=%q dc=%v",
+		host.IP, host.DNSHostName, host.OperatingSystem, host.IsDomainController)
 
+	var parentUID *string
 	if domainUID != "" {
-		result, err := n.services.DomainService.AddHost(ctx, assertCtxHost, domainUID, host, n.configKey)
-		if err != nil {
-			return "", fmt.Errorf("failed to add host to domain: %w", err)
-		}
-		hostUID = result.Entity.UID
-		log.Printf("[NetworkExplorer] Host ip=%s linked to domain uid=%s → host uid=%s", ip, domainUID, hostUID)
-	} else {
-		hostUID, err = n.services.HostService.CreateWithUnknownDomain(ctx, host, params.ProjectUID, n.configKey)
-		if err != nil {
-			return "", fmt.Errorf("failed to create host without domain: %w", err)
-		}
-		log.Printf("[NetworkExplorer] Host ip=%s created without domain → uid=%s", ip, hostUID)
+		parentUID = &domainUID
 	}
+
+	log.Printf("[DEBUG] upsertHost: calling HostService.UpsertHost ip=%s parentUID=%v",
+		ip, parentUID)
+
+	result, err := n.services.HostService.UpsertHost(
+		ctx,
+		upsert.Input[*model.Host]{
+			Entity:       host,
+			ProjectUID:   params.ProjectUID,
+			ParentUID:    parentUID,
+			ParentType:   "Domain",
+			AssertionCtx: assertCtxHost,
+			Actor:        n.configKey,
+		},
+	)
+	if err != nil {
+		log.Printf("[ERROR] upsertHost: HostService.UpsertHost failed ip=%s err=%v", ip, err)
+		return "", fmt.Errorf("failed to upsert host: %w", err)
+	}
+
+	log.Printf("[DEBUG] upsertHost: ok ip=%s uid=%s", ip, result.Entity.UID)
 
 	sse.NewEvent(events.HostDiscovered).
 		WithData("ip", ip).
+		WithData("hostname", host.DNSHostName).
+		WithData("os", host.OperatingSystem).
+		WithData("os_version", host.OperatingSystemVersion).
+		WithData("dc", host.IsDomainController).
 		WithData("timestamp", time.Now().Unix()).
 		Log(n.logger)
 
-	return hostUID, nil
+	log.Printf("[NetworkExplorer] Host upserted ip=%s dns=%s os=%q dc=%v uid=%s",
+		ip, host.DNSHostName, host.OperatingSystem, host.IsDomainController, result.Entity.UID)
+
+	return result.Entity.UID, nil
 }
 
-func (n *NetworkExplorer) buildServices(ctx context.Context, host serializable.Host, hostUID string) {
+// ── upsertServices ────────────────────────────────────────────────────────────
+
+func (n *NetworkExplorer) upsertServices(ctx context.Context, host serializable.Host, hostUID string) {
 	if hostUID == "" {
 		return
 	}
+
+	log.Printf("[DEBUG] upsertServices: hostUID=%s portCount=%d", hostUID, len(host.Ports.Port))
 
 	for _, port := range host.Ports.Port {
 		if port.State.State != "open" {
 			continue
 		}
 
-		serviceBuilder := model.NewServiceBuilder().
+		service := model.NewServiceBuilder().
 			WithName(port.Service.Name).
-			WithPort(port.Portid)
+			WithPort(port.Portid).
+			Build()
 
-		// TODO
-		//if port.Service.Product != "" {
-		//	serviceBuilder.WithProduct(port.Service.Product)
-		//}
-		//if port.Service.Version != "" {
-		//	serviceBuilder.WithVersion(port.Service.Version)
-		//}
-
-		service := serviceBuilder.Build()
-
-		_, err := n.services.HostService.AddService(ctx, assertCtxService, hostUID, service, n.configKey)
+		_, err := n.services.HostService.AddService(
+			ctx,
+			assertCtxService,
+			hostUID,
+			service,
+			n.configKey,
+		)
 		if err != nil {
-			log.Printf("[NetworkExplorer] error adding service port=%s host=%s: %v", port.Portid, hostUID, err)
+			log.Printf("[ERROR] upsertServices: AddService failed port=%s host=%s err=%v",
+				port.Portid, hostUID, err)
 			continue
 		}
+
+		log.Printf("[DEBUG] upsertServices: ok port=%s service=%s host=%s",
+			port.Portid, port.Service.Name, hostUID)
 
 		sse.NewEvent(events.ServiceDetected).
 			WithData("port", port.Portid).
 			WithData("service", port.Service.Name).
+			WithData("product", port.Service.Product).
+			WithData("version", port.Service.Version).
 			WithData("timestamp", time.Now().Unix()).
 			Log(n.logger)
-
-		log.Printf("[NetworkExplorer] Service %s:%s added to host uid=%s", port.Service.Name, port.Portid, hostUID)
 	}
 }
 
-// Domain / Forest extraction
+// ── Domain / Forest extraction ────────────────────────────────────────────────
 
 func (n *NetworkExplorer) extractDomainName(document *xmlquery.Node, xb *internal.XPathBuilder) (string, string) {
 	ldapPorts := []string{"389", "636", "3268", "3269"}
@@ -401,22 +521,12 @@ func (n *NetworkExplorer) extractDomainName(document *xmlquery.Node, xb *interna
 		getXPath func(port string) string
 		extract  func(string) string
 	}{
-		{
-			name:     "LDAP ExtraInfo",
-			getXPath: xb.LDAPExtraInfo,
-			extract:  extractDomainFromExtrainfo,
-		},
-		{
-			name:     "SSL Cert CommonName",
-			getXPath: xb.SSLCertCommonName,
-			extract:  extractDomainFromFQDN,
-		},
+		{name: "LDAP ExtraInfo", getXPath: xb.LDAPExtraInfo, extract: extractDomainFromExtrainfo},
+		{name: "SSL Cert CommonName", getXPath: xb.SSLCertCommonName, extract: extractDomainFromFQDN},
 		{
 			name:     "SSL Cert SAN-DNS",
 			getXPath: xb.SSLCertSANDNS,
-			extract: func(text string) string {
-				return extractDomainFromFQDN(strings.TrimPrefix(text, "DNS:"))
-			},
+			extract:  func(text string) string { return extractDomainFromFQDN(strings.TrimPrefix(text, "DNS:")) },
 		},
 		{
 			name:     "SSL Cert DomainComponent",
@@ -443,15 +553,26 @@ func (n *NetworkExplorer) extractDomainName(document *xmlquery.Node, xb *interna
 			}
 		}
 	}
-
 	return "", ""
 }
 
-func (n *NetworkExplorer) extractForestRoot(document *xmlquery.Node, ip string) string {
-	xpaths := []string{
-		fmt.Sprintf("//host[address/@addr='%s']//script[@id='rdp-ntlm-info']/table/elem[@key='DNS_Tree_Name']", ip),
-		fmt.Sprintf("//host[address/@addr='%s']//script[@id='ms-sql-ntlm-info']/table/table/elem[@key='DNS_Tree_Name']", ip),
+func (n *NetworkExplorer) extractForestRoot(xb *internal.XPathBuilder, document *xmlquery.Node) string {
+	if node := xmlquery.FindOne(document, xb.DNSTreeNameRDP()); node != nil {
+		if v := strings.TrimSpace(node.InnerText()); v != "" {
+			return v
+		}
 	}
+	if node := xmlquery.FindOne(document, xb.DNSTreeNameSQL()); node != nil {
+		if v := strings.TrimSpace(node.InnerText()); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+func firstText(document *xmlquery.Node, xpaths ...string) string {
 	for _, xpath := range xpaths {
 		if node := xmlquery.FindOne(document, xpath); node != nil {
 			if v := strings.TrimSpace(node.InnerText()); v != "" {
@@ -461,8 +582,6 @@ func (n *NetworkExplorer) extractForestRoot(document *xmlquery.Node, ip string) 
 	}
 	return ""
 }
-
-// String helpers
 
 func extractDomainFromExtrainfo(info string) string {
 	re := regexp.MustCompile(`Domain:\s*([a-zA-Z0-9.-]+)`)

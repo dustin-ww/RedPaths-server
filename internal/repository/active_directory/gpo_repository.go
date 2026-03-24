@@ -1,7 +1,7 @@
 package active_directory
 
 import (
-	"RedPaths-server/internal/repository/dgraphutil"
+	dgraphutil2 "RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model/active_directory/gpo"
 	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/core/res"
@@ -81,7 +81,7 @@ func (d *DgraphGPORepository) GetGPOLinksWithGPO(
 		"last_seen_by",
 	}
 
-	results, err := dgraphutil.GetEntitiesWithAssertionsAndEmbeddedRelation[*gpo.Link](
+	results, err := dgraphutil2.GetEntitiesWithAssertionsAndEmbeddedRelation[*gpo.Link](
 		ctx,
 		tx,
 		domainUID,
@@ -127,7 +127,7 @@ func (d *DgraphGPORepository) GetGPOLinksWithGPO(
 */
 func (d *DgraphGPORepository) AddGPOToLink(ctx context.Context, tx *dgo.Txn, domainUID, assertionUID string) error {
 	relationName := "has_assertion"
-	err := dgraphutil.AddRelation(ctx, tx, domainUID, assertionUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, domainUID, assertionUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking red paths assertion %s to domain %s with relation %s", assertionUID, domainUID, relationName)
 	}
@@ -154,7 +154,7 @@ func (r *DgraphGPORepository) GetAllByDomainUID(ctx context.Context, tx *dgo.Txn
 		"last_seen_by",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertions[*gpo.Link](
+	return dgraphutil2.GetEntitiesWithAssertions[*gpo.Link](
 		ctx,
 		tx,
 		activeDirectoryUID,
@@ -187,7 +187,7 @@ func (d *DgraphGPORepository) FindGPOByNameInContainer(
 		"last_seen_by",
 	}
 
-	result, err := dgraphutil.FindEntityViaAssertionAndRelation[gpo.GPO](
+	result, err := dgraphutil2.FindEntityViaAssertionAndRelation[gpo.GPO](
 		ctx,
 		tx,
 		containerUID,
@@ -214,7 +214,7 @@ func (d *DgraphGPORepository) ExistsGPOByNameInContainer(
 	gpoName string,
 ) (bool, string, error) {
 
-	exists, gpoUID, err := dgraphutil.ExistsEntityViaAssertionAndRelation(
+	exists, gpoUID, err := dgraphutil2.ExistsEntityViaAssertionAndRelation(
 		ctx,
 		tx,
 		containerUID,
@@ -234,16 +234,16 @@ func (d *DgraphGPORepository) ExistsGPOByNameInContainer(
 }
 
 func (d *DgraphGPORepository) CreateGPO(ctx context.Context, tx *dgo.Txn, gpo *gpo.GPO, actor string) (*gpo.GPO, error) {
-	return dgraphutil.CreateEntity(ctx, tx, "GPO", gpo)
+	return dgraphutil2.CreateEntity(ctx, tx, "GPO", gpo)
 }
 
 func (d *DgraphGPORepository) CreateLink(ctx context.Context, tx *dgo.Txn, gpoLink *gpo.Link, actor string) (*gpo.Link, error) {
-	return dgraphutil.CreateEntity(ctx, tx, "GPOLink", gpoLink)
+	return dgraphutil2.CreateEntity(ctx, tx, "GPOLink", gpoLink)
 }
 
 func (r *DgraphDomainRepository) AddLinksToRelation(ctx context.Context, tx *dgo.Txn, gpoLinkUID, gpoUID string) error {
 	relationName := "links_to"
-	err := dgraphutil.AddRelation(ctx, tx, gpoLinkUID, gpoUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, gpoLinkUID, gpoUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking gpo link %s to gpo %s with relation %s", gpoLinkUID, gpoUID, relationName)
 	}
@@ -251,7 +251,7 @@ func (r *DgraphDomainRepository) AddLinksToRelation(ctx context.Context, tx *dgo
 }
 
 func (d *DgraphGPORepository) GetGPOResultsByDomain(ctx context.Context, tx *dgo.Txn, domainUID string) (*res.GPOQueryResult, error) {
-	entries, err := dgraphutil.GetGPOLinksWithGPOs(
+	entries, err := dgraphutil2.GetGPOLinksWithGPOs(
 		ctx,
 		tx,
 		domainUID,
@@ -299,11 +299,11 @@ func (d *DgraphGPORepository) GetLink(ctx context.Context, tx *dgo.Txn, uid stri
 }
 
 func (d *DgraphGPORepository) UpdateGPO(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*gpo.GPO, error) {
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, d.GetGPO)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, d.GetGPO)
 
 }
 
 func (d *DgraphGPORepository) UpdateLink(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*gpo.Link, error) {
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, d.GetLink)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, d.GetLink)
 
 }

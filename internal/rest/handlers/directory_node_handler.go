@@ -82,7 +82,7 @@ func (h *DirectoryNodeHandler) AddUser(c *gin.Context) {
 		c.JSON(http.StatusOK, securityPrincipals)
 	}
 */
-func (h *DirectoryNodeHandler) GetUsers(c *gin.Context) {
+func (h *DirectoryNodeHandler) GetDirectoryNodeUsers(c *gin.Context) {
 	uid := c.Param("directoryNodeUID")
 	if uid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -108,7 +108,7 @@ func (h *DirectoryNodeHandler) GetUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, securityPrincipals)
 }
 
-/*func (h *DirectoryNodeHandler) Get(c *gin.Context) {
+/*func (h *DirectoryNodeHandler) GetProjectActiveDirectory(c *gin.Context) {
 	uid := c.Param("domainUID")
 	if uid == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -117,7 +117,7 @@ func (h *DirectoryNodeHandler) GetUsers(c *gin.Context) {
 		return
 	}
 
-	project, err := h.activeDirectoryService.Get(
+	project, err := h.activeDirectoryService.GetProjectActiveDirectory(
 		c.Request.Context(),
 		uid,
 	)

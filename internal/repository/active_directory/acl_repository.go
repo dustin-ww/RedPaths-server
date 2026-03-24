@@ -1,7 +1,7 @@
 package active_directory
 
 import (
-	"RedPaths-server/internal/repository/dgraphutil"
+	dgraphutil2 "RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model/active_directory/priv"
 	"RedPaths-server/pkg/model/core"
 	"RedPaths-server/pkg/model/core/res"
@@ -85,9 +85,9 @@ func NewDgraphDgraphACLRepository(db *dgo.Dgraph) *DgraphACLRepository {
 
 // ACL
 func (r *DgraphACLRepository) CreateACL(ctx context.Context, tx *dgo.Txn, acl *priv.ACL, actor string) (*priv.ACL, error) {
-	dgraphutil.InitCreateMetadata(&acl.RedPathsMetadata, actor)
+	dgraphutil2.InitCreateMetadata(&acl.RedPathsMetadata, actor)
 	log.Println("Create ACL")
-	return dgraphutil.CreateEntity(ctx, tx, "ACL", acl)
+	return dgraphutil2.CreateEntity(ctx, tx, "ACL", acl)
 }
 
 func (r *DgraphACLRepository) GetACL(ctx context.Context, tx *dgo.Txn, uid string) (*priv.ACL, error) {
@@ -100,13 +100,13 @@ func (r *DgraphACLRepository) GetACL(ctx context.Context, tx *dgo.Txn, uid strin
             }
         }
     `
-	return dgraphutil.GetEntityByUID[priv.ACL](ctx, tx, uid, "acl", query)
+	return dgraphutil2.GetEntityByUID[priv.ACL](ctx, tx, uid, "acl", query)
 }
 
 func (r *DgraphACLRepository) UpdateACL(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*priv.ACL, error) {
 	// legacy
 	fields["updated_at"] = time.Now().Format(time.RFC3339)
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.GetACL)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, r.GetACL)
 }
 
 func (r *DgraphDirectoryNodeRepository) DeleteACL(ctx context.Context, tx *dgo.Txn, aclUID string) error {
@@ -117,8 +117,8 @@ func (r *DgraphDirectoryNodeRepository) DeleteACL(ctx context.Context, tx *dgo.T
 // ACE
 
 func (r *DgraphACLRepository) CreateACE(ctx context.Context, tx *dgo.Txn, ace *priv.ACE, actor string) (*priv.ACE, error) {
-	dgraphutil.InitCreateMetadata(&ace.RedPathsMetadata, actor)
-	return dgraphutil.CreateEntity(ctx, tx, "ACE", ace)
+	dgraphutil2.InitCreateMetadata(&ace.RedPathsMetadata, actor)
+	return dgraphutil2.CreateEntity(ctx, tx, "ACE", ace)
 }
 
 func (r *DgraphACLRepository) GetACE(ctx context.Context, tx *dgo.Txn, uid string) (*priv.ACE, error) {
@@ -133,13 +133,13 @@ func (r *DgraphACLRepository) GetACE(ctx context.Context, tx *dgo.Txn, uid strin
             }
         }
     `
-	return dgraphutil.GetEntityByUID[priv.ACE](ctx, tx, uid, "ace", query)
+	return dgraphutil2.GetEntityByUID[priv.ACE](ctx, tx, uid, "ace", query)
 }
 
 func (r *DgraphACLRepository) UpdateACE(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*priv.ACE, error) {
 	// legacy
 	fields["updated_at"] = time.Now().Format(time.RFC3339)
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.GetACE)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, r.GetACE)
 }
 
 func (r *DgraphDirectoryNodeRepository) DeleteACE(ctx context.Context, tx *dgo.Txn, aceUID string) error {
@@ -150,8 +150,8 @@ func (r *DgraphDirectoryNodeRepository) DeleteACE(ctx context.Context, tx *dgo.T
 //ADRights
 
 func (r *DgraphACLRepository) CreateADRight(ctx context.Context, tx *dgo.Txn, adRight *priv.ADRight, actor string) (*priv.ADRight, error) {
-	dgraphutil.InitCreateMetadata(&adRight.RedPathsMetadata, actor)
-	return dgraphutil.CreateEntity(ctx, tx, "ad_right", adRight)
+	dgraphutil2.InitCreateMetadata(&adRight.RedPathsMetadata, actor)
+	return dgraphutil2.CreateEntity(ctx, tx, "ad_right", adRight)
 }
 
 func (r *DgraphACLRepository) GetADRight(ctx context.Context, tx *dgo.Txn, uid string) (*priv.ADRight, error) {
@@ -165,13 +165,13 @@ func (r *DgraphACLRepository) GetADRight(ctx context.Context, tx *dgo.Txn, uid s
             }
         }
     `
-	return dgraphutil.GetEntityByUID[priv.ADRight](ctx, tx, uid, "ad_right", query)
+	return dgraphutil2.GetEntityByUID[priv.ADRight](ctx, tx, uid, "ad_right", query)
 }
 
 func (r *DgraphACLRepository) UpdateADRight(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*priv.ADRight, error) {
 	// legacy
 	fields["updated_at"] = time.Now().Format(time.RFC3339)
-	return dgraphutil.UpdateAndGet(ctx, tx, uid, actor, fields, r.GetADRight)
+	return dgraphutil2.UpdateAndGet(ctx, tx, uid, actor, fields, r.GetADRight)
 }
 
 func (r *DgraphDirectoryNodeRepository) DeleteADRight(ctx context.Context, tx *dgo.Txn, aceUID string) error {
@@ -193,7 +193,7 @@ func (r *DgraphACLRepository) GetAllACEByACL(ctx context.Context, tx *dgo.Txn, a
 		"last_seen_by",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertions[*priv.ACE](
+	return dgraphutil2.GetEntitiesWithAssertions[*priv.ACE](
 		ctx,
 		tx,
 		aclUID,
@@ -217,7 +217,7 @@ func (r *DgraphACLRepository) GetAllRightsByACE(ctx context.Context, tx *dgo.Txn
 		"last_seen_by",
 	}
 
-	return dgraphutil.GetEntitiesWithAssertions[*priv.ADRight](
+	return dgraphutil2.GetEntitiesWithAssertions[*priv.ADRight](
 		ctx,
 		tx,
 		aceUID,
@@ -231,7 +231,7 @@ func (r *DgraphACLRepository) GetAllRightsByACE(ctx context.Context, tx *dgo.Txn
 func (r *DgraphACLRepository) LinkACLToEntity(ctx context.Context, tx *dgo.Txn, aclUID, entityUID string) error {
 	relationName := "has_acl"
 	log.Printf("AUTO LINKING: acl %s and entity %s", aclUID, entityUID)
-	err := dgraphutil.AddRelation(ctx, tx, aclUID, entityUID, relationName)
+	err := dgraphutil2.AddRelation(ctx, tx, aclUID, entityUID, relationName)
 	if err != nil {
 		return fmt.Errorf("error while linking service %s to host %s with relation name %s", aclUID, entityUID, relationName)
 	}

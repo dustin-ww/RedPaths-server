@@ -1,4 +1,4 @@
-package dgraphutil
+package dgraph
 
 import (
 	"RedPaths-server/pkg/model/core"
@@ -316,6 +316,7 @@ func InitCreateMetadata(meta *core.RedPathsMetadata, actor string) {
 
 	meta.CreatedAt = now
 	meta.DiscoveredAt = now
+	meta.ModifiedAt = now
 	meta.LastSeenAt = now
 	meta.DiscoveredBy = actor
 	meta.LastSeenBy = actor
@@ -854,7 +855,7 @@ func GetAllEntities[T any](
 
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString(fmt.Sprintf(`
-        query Get%s {
+        query GetProjectActiveDirectory%s {
             %s(func: type(%s)`, entityType, entityType, entityType))
 
 	if limit > 0 {
