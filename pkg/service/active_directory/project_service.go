@@ -275,7 +275,6 @@ func (s *ProjectService) GetOrphanedUsersFromCatalog(ctx context.Context, projec
 // CreateTarget creates a new target and links it to a project.
 // TODO implement cidr
 func (s *ProjectService) CreateTarget(ctx context.Context, projectUID, ip, note string, cidr int) (string, error) {
-	log.Println("CREATE TARGET WITH: " + projectUID + ip + note)
 
 	var targetUID string
 
@@ -300,9 +299,9 @@ func (s *ProjectService) createTarget(ctx context.Context, tx *dgo.Txn, cidr int
 	log.Println(cidr)
 	target := map[string]interface{}{
 		"uid":         "_:target",
-		"ip":          ip,
-		"cidr":        cidr,
-		"note":        note,
+		"target.ip":   ip,
+		"target.cidr": cidr,
+		"target.note": note,
 		"dgraph.type": "Target",
 	}
 

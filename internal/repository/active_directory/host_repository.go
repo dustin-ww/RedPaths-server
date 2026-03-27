@@ -30,6 +30,10 @@ type HostRepository interface {
 
 	UpdateHost(ctx context.Context, tx *dgo.Txn, uid, actor string, fields map[string]interface{}) (*model.Host, error)
 	FindExisting(ctx context.Context, tx *dgo.Txn, projectUID string, host *model.Host) (*dgraphutil2.ExistenceResult[*model.Host], error)
+	// FindOrphanedDuplicates returns hosts in the project's orphaned catalog that
+	// share any unique identifier (ip / dns / dn) with the given host.
+	// Used post-hierarchy-merge to locate stale orphaned entries for cleanup.
+	FindOrphanedDuplicates(ctx context.Context, tx *dgo.Txn, projectUID string, host *model.Host) ([]*res.EntityResult[*model.Host], error)
 }
 
 var hostHierarchyHops = []dgraphutil2.HopConfig{
@@ -251,7 +255,21 @@ func (r *DraphHostRepository) FindExisting(
 	)
 }
 
-// buildHostFilters constructs the unique field filters for a Host.
+// FindOrphanedDuplicates returns orphaned catalog hosts whose unique fields
+// overlap with the given host (OR match on ip / dns_host_name / distinguished_name).
+func (r *DraphHostRepository) FindOrphanedDuplicates(
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectUID string,
+	host *model.Host,
+) ([]*res.EntityResult[*model.Host], error) {
+	filters := BuildHostFilter(host)
+	return dgraphutil2.FindOrphanedCandidates[*model.Host](
+		ctx, tx, projectUID, "Host", filters, hostFields,
+	)
+}
+
+// BuildHostFilter constructs the unique field filters for a Host.
 // Empty values are automatically skipped inside CheckEntityExists.
 func BuildHostFilter(host *model.Host) []dgraphutil2.UniqueFieldFilter {
 	return []dgraphutil2.UniqueFieldFilter{

@@ -181,7 +181,8 @@ func (h *ProjectHandler) AddProjectActiveDirectory(c *gin.Context) {
 	ac := assertion.FromRequest(request.AssertionContext)
 
 	activeDirectory := &rpadmodel.ActiveDirectory{
-		ForestName: request.ForestName,
+		ForestName:            request.ForestName,
+		ForestFunctionalLevel: request.ForestFunctionalLevel,
 	}
 
 	projectUid := c.Param("projectUID")
@@ -212,9 +213,19 @@ func (h *ProjectHandler) GetCatalogDomains(c *gin.Context) {
 		h.projectService.GetAllDomainsFromCatalog)
 }
 
+func (h *ProjectHandler) GetPlacedDomains(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve placed domains",
+		h.projectService.GetAllDomains)
+}
+
 func (h *ProjectHandler) GetCatalogHosts(c *gin.Context) {
 	handleCatalogGet(c, "projectUID", "Failed to retrieve hosts from catalog",
 		h.projectService.GetAllHostsFromCatalog)
+}
+
+func (h *ProjectHandler) GetPlacedHosts(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve placed domains",
+		h.projectService.GetHostsByProject)
 }
 
 func (h *ProjectHandler) GetCatalogUsers(c *gin.Context) {
@@ -222,14 +233,29 @@ func (h *ProjectHandler) GetCatalogUsers(c *gin.Context) {
 		h.projectService.GetAllUsersFromCatalog)
 }
 
+//func (h *ProjectHandler) GetPlacedUsers(c *gin.Context) {
+//	handleCatalogGet(c, "projectUID", "Failed to retrieve users from catalog",
+//		h.projectService.GetUsersByProject)
+//}
+
 func (h *ProjectHandler) GetCatalogServices(c *gin.Context) {
 	handleCatalogGet(c, "projectUID", "Failed to retrieve services from catalog",
 		h.projectService.GetAllServicesFromCatalog)
 }
 
+func (h *ProjectHandler) GetPlacedServices(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve users from catalog",
+		h.projectService.GetServicesByProject)
+}
+
 func (h *ProjectHandler) GetCatalogDirectoryNodes(c *gin.Context) {
 	handleCatalogGet(c, "projectUID", "Failed to retrieve directory nodes from catalog",
 		h.projectService.GetAllDirectoryNodesFromCatalog)
+}
+
+func (h *ProjectHandler) GetDirectoryNodes(c *gin.Context) {
+	handleCatalogGet(c, "projectUID", "Failed to retrieve directory nodes",
+		h.projectService.GetAllDirectoryNodes)
 }
 
 func (h *ProjectHandler) GetProjectActiveDirectories(c *gin.Context) {

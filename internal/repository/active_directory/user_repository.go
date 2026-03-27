@@ -1,6 +1,7 @@
 package active_directory
 
 import (
+	"RedPaths-server/internal/repository/active_directory/shared"
 	"RedPaths-server/internal/repository/util/dgraph"
 	"RedPaths-server/pkg/model/active_directory"
 	"RedPaths-server/pkg/model/core"
@@ -13,7 +14,8 @@ import (
 )
 
 type UserRepository interface {
-	Get(ctx context.Context, tx *dgo.Txn, userUID string) (*active_directory.User, error)
+	shared.SecurityPrincipalRepository[active_directory.User]
+
 	Create(ctx context.Context, tx *dgo.Txn, incomingUser *active_directory.User, actor string) (*active_directory.User, error)
 	AddToDomain(ctx context.Context, tx *dgo.Txn, userID string, domainUID string) error
 	UserExistsByName(ctx context.Context, tx *dgo.Txn, projectUID string, name string) (bool, error)
@@ -31,7 +33,28 @@ type DraphUserRepository struct {
 	DB *dgo.Dgraph
 }
 
-func (r *DraphUserRepository) Get(ctx context.Context, tx *dgo.Txn, userUID string) (*active_directory.User, error) {
+func (r *DraphUserRepository) Get(ctx context.Context, tx *dgo.Txn, uid string) (*active_directory.User, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (r *DraphUserRepository) FindByUID(ctx context.Context, uid string) (*active_directory.User, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (r *DraphUserRepository) FindBySID(ctx context.Context, sid string) (*active_directory.User, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (r *DraphUserRepository) FindByDomain(ctx context.Context, domainUID string) (*dgraph.ExistenceResult[*active_directory.User], error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (r *DraphUserRepository) Delete(ctx context.Context, uid string) error {
+	//TODO implement me
 	panic("implement me")
 }
 

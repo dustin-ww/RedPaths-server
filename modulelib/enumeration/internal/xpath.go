@@ -44,23 +44,31 @@ func (b *XPathBuilder) SSLCertSANDNS(portID string) string {
 
 // ── Identity ──────────────────────────────────────────────────────────────────
 
-func (b *XPathBuilder) DNSComputerNameRDP() string {
-	return fmt.Sprintf("%s/script[@id='rdp-ntlm-info']/table/elem[@key='DNS_Computer_Name']", b.hostBase)
-}
 func (b *XPathBuilder) DNSComputerNameSQL() string {
-	return fmt.Sprintf("%s/script[@id='ms-sql-ntlm-info']/table/table/elem[@key='DNS_Computer_Name']", b.hostBase)
+	return fmt.Sprintf("%s/ports/port/script[@id='ms-sql-ntlm-info']/table/elem[@key='DNS_Computer_Name']", b.hostBase)
+}
+
+func (b *XPathBuilder) NetBIOSComputerNameSQL() string {
+	return fmt.Sprintf("%s/ports/port/script[@id='ms-sql-ntlm-info']/table/elem[@key='NetBIOS_Computer_Name']", b.hostBase)
+}
+
+func (b *XPathBuilder) DNSTreeNameSQL() string {
+	return fmt.Sprintf("%s/ports/port/script[@id='ms-sql-ntlm-info']/table/elem[@key='DNS_Tree_Name']", b.hostBase)
+}
+
+// XPathBuilder — korrigierte RDP-Pfade
+
+func (b *XPathBuilder) DNSTreeNameRDP() string {
+	return fmt.Sprintf("%s/ports/port[@portid='3389']/script[@id='rdp-ntlm-info']/elem[@key='DNS_Tree_Name']", b.hostBase)
+}
+func (b *XPathBuilder) DNSComputerNameRDP() string {
+	return fmt.Sprintf("%s/ports/port[@portid='3389']/script[@id='rdp-ntlm-info']/elem[@key='DNS_Computer_Name']", b.hostBase)
 }
 func (b *XPathBuilder) NetBIOSComputerNameRDP() string {
-	return fmt.Sprintf("%s/script[@id='rdp-ntlm-info']/table/elem[@key='NetBIOS_Computer_Name']", b.hostBase)
+	return fmt.Sprintf("%s/ports/port[@portid='3389']/script[@id='rdp-ntlm-info']/elem[@key='NetBIOS_Computer_Name']", b.hostBase)
 }
-func (b *XPathBuilder) NetBIOSComputerNameSQL() string {
-	return fmt.Sprintf("%s/script[@id='ms-sql-ntlm-info']/table/table/elem[@key='NetBIOS_Computer_Name']", b.hostBase)
-}
-func (b *XPathBuilder) DNSTreeNameRDP() string {
-	return fmt.Sprintf("%s/script[@id='rdp-ntlm-info']/table/elem[@key='DNS_Tree_Name']", b.hostBase)
-}
-func (b *XPathBuilder) DNSTreeNameSQL() string {
-	return fmt.Sprintf("%s/script[@id='ms-sql-ntlm-info']/table/table/elem[@key='DNS_Tree_Name']", b.hostBase)
+func (b *XPathBuilder) ProductVersionRDP() string {
+	return fmt.Sprintf("%s/ports/port[@portid='3389']/script[@id='rdp-ntlm-info']/elem[@key='Product_Version']", b.hostBase)
 }
 
 // ── OS ────────────────────────────────────────────────────────────────────────
@@ -71,14 +79,20 @@ func (b *XPathBuilder) SMBOS() string {
 func (b *XPathBuilder) ServiceOSType() string {
 	return fmt.Sprintf("%s/ports/port/service[@ostype!='']/@ostype", b.hostBase)
 }
-func (b *XPathBuilder) ProductVersionRDP() string {
-	return fmt.Sprintf("%s/script[@id='rdp-ntlm-info']/table/elem[@key='Product_Version']", b.hostBase)
-}
+
 func (b *XPathBuilder) ProductVersionSQL() string {
-	return fmt.Sprintf("%s/script[@id='ms-sql-ntlm-info']/table/table/elem[@key='Product_Version']", b.hostBase)
+	return fmt.Sprintf("%s/ports/port/script[@id='ms-sql-ntlm-info']/table/elem[@key='Product_Version']", b.hostBase)
 }
 func (b *XPathBuilder) SMBFQDN() string {
 	return fmt.Sprintf("%s/hostscript/script[@id='smb-os-discovery']/elem[@key='fqdn']", b.hostBase)
+}
+
+func (b *XPathBuilder) DNSDomainNameRDP() string {
+	return fmt.Sprintf("%s/ports/port[@portid='3389']/script[@id='rdp-ntlm-info']/elem[@key='DNS_Domain_Name']", b.hostBase)
+}
+
+func (b *XPathBuilder) DNSDomainNameSQL() string {
+	return fmt.Sprintf("%s/ports/port/script[@id='ms-sql-ntlm-info']/table/elem[@key='DNS_Domain_Name']", b.hostBase)
 }
 
 // ── DC detection — individual port checks ────────────────────────────────────

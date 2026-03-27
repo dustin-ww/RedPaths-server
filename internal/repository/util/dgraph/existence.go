@@ -99,6 +99,46 @@ func CheckEntityExists[T any](
 	)
 }
 
+// FindOrphanedCandidates searches the project catalog for entities of objectType
+// linked via has_orphaned_entity that match any of the given filters (OR mode).
+//
+// This is intentionally separate from CheckEntityExists: it is called AFTER a
+// successful hierarchy lookup to find stale orphaned entries that were created
+// before the entity's AD position was known, so they can be cleaned up.
+func FindOrphanedCandidates[T any](
+	ctx context.Context,
+	tx *dgo.Txn,
+	projectUID, objectType string,
+	filters []UniqueFieldFilter,
+	objectFields []string,
+) ([]*res.EntityResult[T], error) {
+	if tx == nil {
+		return nil, fmt.Errorf("transaction cannot be nil")
+	}
+
+	fieldsStr := strings.Join(objectFields, "\n\t\t\t\t\t")
+	combinedFilter := buildCombinedFilter(objectType, filters, FilterModeOR)
+
+	query := fmt.Sprintf(`query findOrphanedCandidates($subjectUID: string) {
+		subject(func: uid($subjectUID)) {
+			~assertion.subject @filter(eq(assertion.predicate, "has_orphaned_entity")) {
+				object: assertion.object %s {
+					%s
+				}
+			}
+		}
+	}`, combinedFilter, fieldsStr)
+
+	resp, err := tx.QueryWithVars(ctx, query, map[string]string{
+		"$subjectUID": projectUID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("orphaned candidates query failed: %w", err)
+	}
+
+	return parseExistenceResponse[T](resp.Json, "findOrphanedCandidates")
+}
+
 func ScoreCandidates[T any](
 	candidates []*res.EntityResult[T],
 	filters []UniqueFieldFilter,

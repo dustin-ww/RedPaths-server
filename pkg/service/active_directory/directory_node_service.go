@@ -479,7 +479,7 @@ func (s *DirectoryNodeService) CreateBuildDefaultDirectoryNodes(ctx context.Cont
 			},
 			Object: &utils2.UIDRef{
 				UID:  createdDirNode.UID,
-				Type: "Default Directory Node",
+				Type: "DirectoryNode",
 			},
 		}
 

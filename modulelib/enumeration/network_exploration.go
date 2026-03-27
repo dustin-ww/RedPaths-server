@@ -202,6 +202,9 @@ func (n *NetworkExplorer) processScanResults(
 		xb := internal.NewXPathBuilder(ip)
 
 		domainName, strategy := n.extractDomainName(document, xb)
+		log.Printf("[DEBUG] host[%d] ip=%s extractDomainName result: domainName=%q strategy=%q",
+			i, ip, domainName, strategy)
+
 		forestRoot := n.extractForestRoot(xb, document)
 		if forestRoot == "" {
 			forestRoot = domainName
@@ -265,7 +268,7 @@ func (n *NetworkExplorer) processScanResults(
 
 		// ── Services ─────────────────────────────────────────────────────────
 		log.Printf("[DEBUG] host[%d] calling upsertServices hostUID=%s", i, hostUID)
-		n.upsertServices(ctx, host, hostUID)
+		n.upsertServices(ctx, host, hostUID, params.ProjectUID)
 	}
 
 	log.Printf("[DEBUG] processScanResults: done")
@@ -468,7 +471,7 @@ func (n *NetworkExplorer) upsertHost(
 
 // ── upsertServices ────────────────────────────────────────────────────────────
 
-func (n *NetworkExplorer) upsertServices(ctx context.Context, host serializable.Host, hostUID string) {
+func (n *NetworkExplorer) upsertServices(ctx context.Context, host serializable.Host, hostUID, projectUID string) {
 	if hostUID == "" {
 		return
 	}
@@ -488,6 +491,7 @@ func (n *NetworkExplorer) upsertServices(ctx context.Context, host serializable.
 		_, err := n.services.HostService.AddService(
 			ctx,
 			assertCtxService,
+			projectUID,
 			hostUID,
 			service,
 			n.configKey,
@@ -513,10 +517,39 @@ func (n *NetworkExplorer) upsertServices(ctx context.Context, host serializable.
 
 // ── Domain / Forest extraction ────────────────────────────────────────────────
 
+// extractDomainName returns the DNS domain name the host belongs to.
+//
+// Strategy priority (highest confidence first):
+//  1. RDP NTLM-Info  — DNS_Domain_Name reflects the host's own domain exactly,
+//     even on DCs where LDAP extrainfo returns the forest root instead.
+//  2. SQL NTLM-Info  — same reliability as RDP, used when RDP is not open.
+//  3. LDAP ExtraInfo — fallback for hosts with LDAP but no RDP/SQL.
+//     NOTE: on forest-root DCs this returns the forest name, not a child domain.
+//  4. SSL Cert CommonName  — extract domain from subject FQDN.
+//  5. SSL Cert SAN-DNS     — extract domain from SAN DNS entry.
+//  6. SSL Cert DomainComponent — issuer DC field as last resort.
 func (n *NetworkExplorer) extractDomainName(document *xmlquery.Node, xb *internal.XPathBuilder) (string, string) {
+
+	// Strategy 1: RDP NTLM-Info — most reliable, DNS_Domain_Name = host's own domain
+	if node := xmlquery.FindOne(document, xb.DNSDomainNameRDP()); node != nil {
+		if v := strings.TrimSpace(node.InnerText()); v != "" {
+			log.Printf("[NetworkExplorer] Domain=%s via strategy=RDP NTLM", v)
+			return v, "RDP NTLM"
+		}
+	}
+
+	// Strategy 2: SQL NTLM-Info
+	if node := xmlquery.FindOne(document, xb.DNSDomainNameSQL()); node != nil {
+		if v := strings.TrimSpace(node.InnerText()); v != "" {
+			log.Printf("[NetworkExplorer] Domain=%s via strategy=SQL NTLM", v)
+			return v, "SQL NTLM"
+		}
+	}
+
+	// Strategies 3–6: LDAP-based fallback (hosts without RDP/SQL open)
 	ldapPorts := []string{"389", "636", "3268", "3269"}
 
-	strategies := []struct {
+	ldapStrategies := []struct {
 		name     string
 		getXPath func(port string) string
 		extract  func(string) string
@@ -540,7 +573,7 @@ func (n *NetworkExplorer) extractDomainName(document *xmlquery.Node, xb *interna
 		},
 	}
 
-	for _, s := range strategies {
+	for _, s := range ldapStrategies {
 		for _, port := range ldapPorts {
 			nodes, err := xmlquery.QueryAll(document, s.getXPath(port))
 			if err != nil || len(nodes) == 0 || nodes[0] == nil {
@@ -553,6 +586,7 @@ func (n *NetworkExplorer) extractDomainName(document *xmlquery.Node, xb *interna
 			}
 		}
 	}
+
 	return "", ""
 }
 

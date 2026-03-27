@@ -25,13 +25,15 @@ import (
 )
 
 type DomainService struct {
-	domainRepo        active_directory.DomainRepository
-	hostRepo          active_directory.HostRepository
-	directoryNodeRepo active_directory.DirectoryNodeRepository
-	assertionRepo     engine.AssertionRepository
-	aclRepo           active_directory.ACLRepository
-	gpoRepo           active_directory.GPORepository
-	catalogService    *engine3.CatalogService
+	domainRepo           active_directory.DomainRepository
+	hostRepo             active_directory.HostRepository
+	directoryNodeRepo    active_directory.DirectoryNodeRepository
+	userRepo             active_directory.UserRepository
+	assertionRepo        engine.AssertionRepository
+	aclRepo              active_directory.ACLRepository
+	gpoRepo              active_directory.GPORepository
+	catalogService       *engine3.CatalogService
+	directoryNodeService *DirectoryNodeService // neu
 
 	db *dgo.Dgraph
 }
@@ -40,20 +42,24 @@ func NewDomainService(dgraphCon *dgo.Dgraph) (*DomainService, error) {
 	domainRepo := active_directory.NewDgraphDomainRepository(dgraphCon)
 	hostRepo := active_directory.NewDgraphHostRepository(dgraphCon)
 	directoryNodeRepo := active_directory.NewDgraphDirectoryNodeRepository(dgraphCon)
+	userRepo := active_directory.NewDgraphUserRepository(dgraphCon)
 	assertionRepo := engine.NewDgraphAssertionRepository(dgraphCon)
 	aclRepo := active_directory.NewDgraphDgraphACLRepository(dgraphCon)
 	gpoRepo := active_directory.NewDgraphGPORepository(dgraphCon)
 	catalogService := engine3.NewCatalogService(dgraphCon)
+	directoryNodeService, _ := NewDirectoryNodeService(dgraphCon)
 
 	return &DomainService{
-		db:                dgraphCon,
-		domainRepo:        domainRepo,
-		hostRepo:          hostRepo,
-		directoryNodeRepo: directoryNodeRepo,
-		assertionRepo:     assertionRepo,
-		aclRepo:           aclRepo,
-		gpoRepo:           gpoRepo,
-		catalogService:    catalogService,
+		db:                   dgraphCon,
+		domainRepo:           domainRepo,
+		hostRepo:             hostRepo,
+		directoryNodeRepo:    directoryNodeRepo,
+		userRepo:             userRepo,
+		assertionRepo:        assertionRepo,
+		aclRepo:              aclRepo,
+		gpoRepo:              gpoRepo,
+		catalogService:       catalogService,
+		directoryNodeService: directoryNodeService,
 	}, nil
 }
 
@@ -136,6 +142,104 @@ func (s *DomainService) AddHost(
 
 	if err != nil {
 		return nil, fmt.Errorf("AddDomainHost failed: %w", err)
+	}
+
+	return result, nil
+}
+
+func (s *DomainService) AddUser(
+	ctx context.Context,
+	assertionCtx assertion.Context,
+	projectUID string,
+	domainUID string,
+	incomingUser *rpad.User,
+	actor string,
+) (*res.EntityResult[*rpad.User], error) {
+
+	log.Println("[AddDomainUser]")
+
+	var result *res.EntityResult[*rpad.User]
+
+	err := db.ExecuteInTransaction(ctx, s.db, func(tx *dgo.Txn) error {
+		existingUsers, err := s.userRepo.GetByDomainUID(ctx, tx, domainUID)
+		if err != nil {
+			return fmt.Errorf("checking existing users: %w", err)
+		}
+
+		var actualUser *rpad.User
+
+		for _, u := range existingUsers {
+			if (incomingUser.SID != "" && u.SID == incomingUser.SID) ||
+				(incomingUser.SAMAccountName != "" && u.SAMAccountName == incomingUser.SAMAccountName) ||
+				(incomingUser.UPN != "" && u.UPN == incomingUser.UPN) {
+				actualUser = u
+				log.Printf(
+					"[AddDomainUser] Reusing existing user uid=%s name=%s",
+					actualUser.UID,
+					actualUser.Name,
+				)
+				break
+			}
+		}
+
+		if actualUser == nil {
+			createdUser, err := s.userRepo.Create(ctx, tx, incomingUser, actor)
+			if err != nil {
+				return fmt.Errorf("creating user: %w", err)
+			}
+			actualUser = createdUser
+			log.Printf(
+				"[AddDomainUser] Created user uid=%s name=%s",
+				actualUser.UID,
+				actualUser.Name,
+			)
+		}
+
+		assertionSchema := &core.Assertion{
+			Predicate:           core.PredicateHasUser,
+			Method:              core.MethodDirectAdd,
+			Source:              actor,
+			Confidence:          assertionCtx.GetConfidence(),
+			Status:              core.StatusValidated,
+			Timestamp:           time.Now(),
+			HasDiscoveredParent: true,
+			MarkedAsHighValue:   assertionCtx.IsHighValue(),
+			Subject:             &utils2.UIDRef{UID: domainUID, Type: "Domain"},
+			Object:              &utils2.UIDRef{UID: actualUser.UID, Type: "User"},
+		}
+
+		createdAssertion, err := s.assertionRepo.Create(ctx, tx, assertionSchema)
+		if err != nil {
+			return fmt.Errorf("creating assertion: %w", err)
+		}
+
+		result = &res.EntityResult[*rpad.User]{
+			Entity:     actualUser,
+			Assertions: []*core.Assertion{createdAssertion},
+			Metadata: &res.ResultMetadata{
+				Source:         actor,
+				ScanTimestamp:  time.Now(),
+				EntityCount:    1,
+				AssertionCount: 1,
+			},
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("AddDomainUser failed: %w", err)
+	}
+
+	if result != nil && len(result.Assertions) > 0 {
+		if _, catalogErr := engine3.AddToCatalog(
+			ctx, s.catalogService,
+			projectUID, result.Entity.UID, "User",
+			result.Assertions[0], actor,
+		); catalogErr != nil {
+			log.Printf("[AddDomainUser] Warning: failed to add user %s to catalog: %v",
+				result.Entity.UID, catalogErr)
+		}
 	}
 
 	return result, nil
@@ -423,6 +527,12 @@ func (s *DomainService) UpsertDomain(
 			actualDomain = createdDomain
 			log.Printf("[UpsertDomain] Created uid=%s name=%s", actualDomain.UID, actualDomain.Name)
 
+			defaultDirNodes, err := s.directoryNodeService.CreateBuildDefaultDirectoryNodes(ctx, tx, input.Actor, actualDomain.UID)
+			if err != nil {
+				return fmt.Errorf("creating default directory nodes for domain: %w", err)
+			}
+			log.Printf("[UpsertDomain] Created %d default directory nodes for domain uid=%s", len(defaultDirNodes), actualDomain.UID)
+
 		case dgraphutil.ExistenceSourceHierarchy,
 			dgraphutil.ExistenceSourceProject:
 
@@ -436,6 +546,12 @@ func (s *DomainService) UpsertDomain(
 				}
 				actualDomain = createdDomain
 				log.Printf("[UpsertDomain] Low score, created uid=%s", actualDomain.UID)
+
+				defaultDirNodes, err := s.directoryNodeService.CreateBuildDefaultDirectoryNodes(ctx, tx, input.Actor, actualDomain.UID)
+				if err != nil {
+					return fmt.Errorf("creating default directory nodes for domain (low score): %w", err)
+				}
+				log.Printf("[UpsertDomain] Created %d default directory nodes for domain uid=%s", len(defaultDirNodes), actualDomain.UID)
 
 			} else if best.Score >= 0.8 {
 				// --- Case 2: High Confidence → Merge ---

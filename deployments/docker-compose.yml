@@ -38,7 +38,7 @@ services:
   zero:
     image: dgraph/dgraph:latest
     volumes:
-      - zero_datav4:/dgraph
+      - zero_datav5:/dgraph
     ports:
       - 5080:5080
       - 6080:6080
@@ -50,7 +50,7 @@ services:
   alpha:
     image: dgraph/dgraph:latest
     volumes:
-      - alpha_datav4:/dgraph
+      - alpha_datav5:/dgraph
     ports:
       - 8080:8080
       - 9080:9080
@@ -73,7 +73,7 @@ services:
       POSTGRES_USER: "redpaths"
       POSTGRES_PASSWORD: "redpaths"
     volumes:
-      - postgres_datav3:/var/lib/postgresql
+      - postgres_datav5:/var/lib/postgresql
     ports:
       - "5432:5432"
     networks:
@@ -85,6 +85,6 @@ networks:
     name: redpaths_network
 
 volumes:
-  zero_datav4:
-  alpha_datav4:
-  postgres_datav3:
+  zero_datav5:
+  alpha_datav5:
+  postgres_datav5:

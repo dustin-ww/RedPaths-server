@@ -105,6 +105,7 @@ func (h *HostHandler) AddService(c *gin.Context) {
 		return
 	}
 
+	projectUID := c.Param("projectUID")
 	uid := c.Param("hostUID")
 
 	service := &model.Service{
@@ -114,6 +115,7 @@ func (h *HostHandler) AddService(c *gin.Context) {
 	createdService, err := h.hostService.AddService(
 		c.Request.Context(),
 		request.AssertionContext,
+		projectUID,
 		uid,
 		service,
 		"user",
